@@ -1,0 +1,1 @@
+[22:06] Experiment: PURE->UBFC-rPPG, Epoch: 1, Loss: 0.0000
