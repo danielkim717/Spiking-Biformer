@@ -3,3 +3,4 @@
 [22:36] Experiment: PURE->UBFC-rPPG, Epoch: 1, Loss: 0.0000
 [22:47] Experiment: PURE->UBFC-rPPG, Epoch: 1, Loss: 0.0000
 [23:06] Experiment: PURE->UBFC-rPPG, Epoch: 1, Loss: 0.0000
+[23:17] Experiment: PURE->UBFC-rPPG, Epoch: 1, Loss: 0.0000
