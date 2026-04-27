@@ -8,3 +8,4 @@
 [19:13] UBFC-rPPG->PURE, Epoch: 3, Loss: 3.1246
 [19:18] UBFC-rPPG->PURE, Epoch: 3, Loss: 3.1036
 [19:23] UBFC-rPPG->PURE, Epoch: 3, Loss: 2.8743
+[19:28] UBFC-rPPG->PURE, Epoch: 4, Loss: 3.0749
