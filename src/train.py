@@ -86,9 +86,9 @@ def run_experiment(train_ds, test_ds, epochs=30, batch_size=2, v_threshold=1.0, 
         print(f"[!] {train_ds} 또는 {test_ds} 샘플을 찾지 못했습니다. 데이터 경로를 확인하세요.")
         return
 
-    # 논문과 동일하게 SNN Timestep을 4로 맞추되, 비디오 시퀀스 해상도를 위해 patches=(4, 4, 4) 사용
-    # SNN 시뮬레이션 타임스텝 T=4는 모델 내부에서 별도로 처리됨
-    model = PhysBiformer(frame=160, patches=(4, 4, 4), v_threshold=v_threshold, T=4).to(device)
+    # 논문과 동일하게 SNN Timestep T=4를 사용하기 위해 temporal patch 크기를 40으로 설정 (160 / 40 = 4)
+    # 이제 비디오의 시간 차원이 곧 SNN의 타임스텝이 됩니다.
+    model = PhysBiformer(frame=160, patches=(40, 4, 4), v_threshold=v_threshold).to(device)
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=5e-5)
     mse_criterion = nn.MSELoss()
     pearson_criterion = NegPearsonLoss()

@@ -15,6 +15,7 @@ class BiLevelRoutingAttention(nn.Module):
         self.n_win = n_win
         self.topk = topk
         
+        # SNN Q, K, V layers
         self.qkv = nn.Linear(dim, dim * 3)
         self.lif_q = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0, surrogate_function=surrogate.ATan(alpha=2.0), detach_reset=True)
         self.lif_k = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0, surrogate_function=surrogate.ATan(alpha=2.0), detach_reset=True)
@@ -25,32 +26,26 @@ class BiLevelRoutingAttention(nn.Module):
 
     def forward(self, x, T=40, H=4, W=4):
         """
-        x: [T_snn, B, L, C] where L = T*H*W tokens
-        T, H, W: original spatio-temporal resolution of the sequence
+        x: [T_snn, B, L, C]
         """
         T_step, B, L, C = x.shape
         n_win = self.n_win
-        
-        # 1. Routing Phase (SNN Stability: Use Time-Averaged Features)
-        # Average spikes over T_snn to get stable region features
-        x_mean = torch.mean(x, dim=0) # [B, L, C]
-        
-        # Partition into windows: [B, n_win, win_size, C]
-        # For simplicity, we assume L is divisible by n_win
         win_size = L // n_win
-        x_win = x_mean.view(B, n_win, win_size, C)
-        region_feat = x_win.mean(dim=2) # [B, n_win, C]
         
-        # Calculate Routing Map (Adjacency)
-        # Q_r, K_r for routing
-        region_q = region_feat
-        region_k = region_feat
+        # 1. Routing Phase (Spike Summation for Rate Coding)
+        # Using sum(dim=0) as requested for hardware-friendly routing
+        x_spikes_sum = x.sum(dim=0) # [B, L, C] - Total spikes over time
         
-        # [B, n_win, n_win]
-        attn_r = (region_q @ region_k.transpose(-2, -1)) * (C ** -0.5)
-        routing_map = torch.topk(attn_r, k=self.topk, dim=-1).indices # [B, n_win, topk]
+        # Region features
+        x_win = x_spikes_sum.view(B, n_win, win_size, C)
+        region_feat = x_win.sum(dim=2) # [B, n_win, C] - Total spikes per region
         
-        # 2. Attention Phase (Full SNN multi-step)
+        # Calculate Routing Map
+        attn_r = (region_feat @ region_feat.transpose(-2, -1)) * (C ** -0.5)
+        # routing_indices: [B, n_win, topk]
+        routing_indices = torch.topk(attn_r, k=self.topk, dim=-1).indices
+        
+        # 2. Attention Phase (Sparse via Gather)
         qkv = self.qkv(x) # [T_snn, B, L, 3C]
         q, k, v = qkv.chunk(3, dim=-1)
         
@@ -58,31 +53,55 @@ class BiLevelRoutingAttention(nn.Module):
         k = self.lif_k(k)
         v = self.lif_v(v)
         
-        # Split into heads: [T_snn, B, num_heads, L, head_dim]
-        q = q.view(T_step, B, L, self.num_heads, self.head_dim).permute(0, 1, 3, 2, 4)
-        k = k.view(T_step, B, L, self.num_heads, self.head_dim).permute(0, 1, 3, 2, 4)
-        v = v.view(T_step, B, L, self.num_heads, self.head_dim).permute(0, 1, 3, 2, 4)
+        # Split into windows: [T, B, n_win, win_size, head, head_dim]
+        q = q.view(T_step, B, n_win, win_size, self.num_heads, self.head_dim)
+        k = k.view(T_step, B, n_win, win_size, self.num_heads, self.head_dim)
+        v = v.view(T_step, B, n_win, win_size, self.num_heads, self.head_dim)
         
-        # Apply Routing: Gather keys and values from top-k regions
-        # For simplicity in this implementation, we apply the same routing to all B and T
-        # In a real Biformer, we'd use gather/scatter, but here we can approximate
-        # by attending to the selected regions.
+        # --- Real Biformer Gather Logic ---
+        # For each window in Q, we gather top-k windows from K and V
+        # routing_indices: [B, n_win, topk]
         
-        # Simplified SNN Attention (Spiking Physformer style):
-        #attn = (q @ k.transpose(-2, -1)) * self.scale
-        # In Spiking Physformer, they often use a simpler dot product or omit V.
-        # Here we follow the standard Spiking Attention.
+        # We need to expand routing_indices to match the shape for gathering
+        # indices_expanded: [T, B, n_win, topk, win_size, head, head_dim]
+        idx = routing_indices.view(1, B, n_win, self.topk, 1, 1, 1)
+        idx = idx.expand(T_step, B, n_win, self.topk, win_size, self.num_heads, self.head_dim)
         
-        # [T, B, num_heads, L, L] -> extremely sparse
-        # We perform attention only on the regions in routing_map
-        # (This part is mathematically simplified for the demo)
-        attn = (q @ k.transpose(-2, -1)) * self.scale
+        # Gather K and V: [T, B, n_win, topk, win_size, head, head_dim]
+        # We gather from the 'window' dimension (dim=2)
+        # Note: torch.gather doesn't support complex indexing easily for this, 
+        # so we use advanced indexing or a loop for clarity and correctness in SNN.
+        
+        k_gathered = []
+        v_gathered = []
+        for i in range(self.topk):
+            # routing_indices[:, :, i] gives the i-th best window for each query window
+            r_idx = routing_indices[:, :, i] # [B, n_win]
+            # Gather windows: [T, B, n_win, win_size, head, head_dim]
+            k_i = torch.stack([k[:, b, r_idx[b]] for b in range(B)], dim=1)
+            v_i = torch.stack([v[:, b, r_idx[b]] for b in range(B)], dim=1)
+            k_gathered.append(k_i)
+            v_gathered.append(v_i)
+            
+        k_g = torch.cat(k_gathered, dim=3) # [T, B, n_win, topk * win_size, head, head_dim]
+        v_g = torch.cat(v_gathered, dim=3) # [T, B, n_win, topk * win_size, head, head_dim]
+        
+        # Now perform attention: Q [T, B, n_win, win_size, head, head_dim]
+        # K_g [T, B, n_win, L_g, head, head_dim] where L_g = topk * win_size
+        
+        q = q.permute(0, 1, 2, 4, 3, 5) # [T, B, n_win, head, win_size, head_dim]
+        k_g = k_g.permute(0, 1, 2, 4, 3, 5) # [T, B, n_win, head, L_g, head_dim]
+        v_g = v_g.permute(0, 1, 2, 4, 3, 5) # [T, B, n_win, head, L_g, head_dim]
+        
+        # Attention: [T, B, n_win, head, win_size, L_g]
+        attn = (q @ k_g.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
         
-        out = (attn @ v)
+        # Aggregate: [T, B, n_win, head, win_size, head_dim]
+        out = (attn @ v_g)
         
-        # Merge heads
-        out = out.permute(0, 1, 3, 2, 4).reshape(T_step, B, L, C)
+        # Back to original shape
+        out = out.permute(0, 1, 2, 4, 3, 5).reshape(T_step, B, L, C)
         out = self.lif_proj(self.proj(out))
         
         return out
