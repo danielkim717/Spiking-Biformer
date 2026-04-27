@@ -1,100 +1,94 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from src.models.baseline.Physformer import ViT_ST_ST_Compact3_TDC_gra_sharp
+from spikingjelly.activation_based import neuron, surrogate, layer
 from src.models.biformer_attention import BiLevelRoutingAttention
-from spikingjelly.activation_based import neuron, surrogate, functional
+
+class PhysBiformerBlock(nn.Module):
+    def __init__(self, dim, num_heads, v_threshold):
+        super().__init__()
+        self.bn1 = nn.BatchNorm1d(dim)
+        self.lif1 = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0, surrogate_function=surrogate.ATan(alpha=2.0), detach_reset=True)
+        self.attn = BiLevelRoutingAttention(dim, num_heads=num_heads, v_threshold=v_threshold)
+        
+        self.bn2 = nn.BatchNorm1d(dim)
+        self.lif2 = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0, surrogate_function=surrogate.ATan(alpha=2.0), detach_reset=True)
+        self.ffn = nn.Sequential(
+            nn.Linear(dim, dim * 4),
+            nn.GELU(),
+            nn.Linear(dim * 4, dim)
+        )
+        self.scale = nn.Parameter(torch.ones(1) * 0.5)
+
+    def forward(self, x, Lt, b, L, dim):
+        identity = x
+        
+        # Sub-block 1: Attention
+        x_norm = self.bn1(x.transpose(-1, -2).reshape(-1, dim, L)).reshape(Lt, b, dim, L).transpose(-1, -2)
+        spikes = self.lif1(x_norm)
+        self.last_firing_rate1 = spikes.mean().item()
+        
+        x = identity + self.attn(spikes) * self.scale
+        
+        # Sub-block 2: FFN
+        identity = x
+        x_norm = self.bn2(x.transpose(-1, -2).reshape(-1, dim, L)).reshape(Lt, b, dim, L).transpose(-1, -2)
+        spikes = self.lif2(x_norm)
+        self.last_firing_rate2 = spikes.mean().item()
+        
+        x = identity + self.ffn(spikes) * self.scale
+        return x
 
 class PhysBiformer(nn.Module):
-    def __init__(self, frame=160, patches=(4, 4, 4), dim=64, num_heads=4, n_win=8, topk=4, v_threshold=1.0):
+    def __init__(self, dim=64, num_blocks=3, num_heads=4, v_threshold=1.0, frame=160, patches=(40, 4, 4)):
         super().__init__()
         self.dim = dim
-        self.patches = patches
+        self.num_blocks = num_blocks
+        self.frame = frame
         
-        # 1. ANN Stem & Patch Embedding
-        self.baseline = ViT_ST_ST_Compact3_TDC_gra_sharp(
-            frame=frame, patches=patches, dim=dim, num_heads=num_heads, image_size=(160, 128, 128)
+        # Stem (ANN)
+        self.stem = nn.Sequential(
+            nn.Conv3d(3, 16, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
+            nn.BatchNorm3d(16),
+            nn.ReLU(),
+            nn.MaxPool3d(kernel_size=(1, 2, 2)),
+            nn.Conv3d(16, dim, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
+            nn.BatchNorm3d(dim),
+            nn.ReLU(),
+            nn.MaxPool3d(kernel_size=(1, 2, 2))
         )
         
-        # 2. SNN Transformer Blocks
-        # Using LIFNode for Spike Generation
         self.lif_input = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0, surrogate_function=surrogate.ATan(alpha=2.0), detach_reset=True)
         
         self.blocks = nn.ModuleList([
-            nn.ModuleList([
-                nn.BatchNorm1d(dim), # Hardware friendly compared to LayerNorm
-                BiLevelRoutingAttention(dim=dim, num_heads=num_heads, n_win=n_win, topk=topk, v_threshold=v_threshold),
-                nn.BatchNorm1d(dim),
-                nn.Linear(dim, dim * 4),
-                neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0, surrogate_function=surrogate.ATan(alpha=2.0), detach_reset=True),
-                nn.Linear(dim * 4, dim),
-                neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0, surrogate_function=surrogate.ATan(alpha=2.0), detach_reset=True)
-            ]) for _ in range(3)
+            PhysBiformerBlock(dim, num_heads, v_threshold) for _ in range(num_blocks)
         ])
-        
+            
+        self.head = nn.Linear(dim, 1)
+
     def forward(self, x):
-        # x: [B, 3, 160, 128, 128]
         b, c, t, h, w = x.shape
+        x = self.stem(x)
+        _, dim, Lt, Lh, Lw = x.shape
+        L = Lh * Lw
         
-        # --- ANN Stem Phase ---
-        x = self.baseline.Stem0(x)
-        x = self.baseline.Stem1(x)
-        x = self.baseline.Stem2(x)
-        x = self.baseline.patch_embedding(x) # [B, dim, Lt, Lh, Lw]
+        x = x.permute(2, 0, 3, 4, 1).reshape(Lt, b, L, dim)
+        x = self.lif_input(x)
         
-        Lt, Lh, Lw = x.shape[2], x.shape[3], x.shape[4]
-        
-        # --- SNN Simulation Phase (Sequence Mapping) ---
-        # Direct Mapping: Lt (temporal dimension) becomes SNN Timestep T
-        # [B, dim, Lt, Lh, Lw] -> [Lt, B, Lh*Lw, dim]
-        x_snn = x.permute(2, 0, 3, 4, 1).contiguous()
-        x_snn = x_snn.view(Lt, b, Lh * Lw, self.dim)
-        
-        # Initial Spike conversion
-        x_snn = self.lif_input(x_snn)
-        
-        for bn1, attn, bn2, ffn1, lif1, ffn2, lif2 in self.blocks:
-            # SNN Block 1: Attention
-            identity = x_snn
+        firing_rates = []
+        for block in self.blocks:
+            x = block(x, Lt, b, L, dim)
+            firing_rates.append(block.last_firing_rate1)
+            firing_rates.append(block.last_firing_rate2)
             
-            # BatchNorm1d expects [N, C, L] or [N, C]
-            # Here we have [T, B, L, C]. We reshpae to apply BN across tokens
-            x_snn = x_snn.permute(0, 1, 3, 2) # [T, B, C, L]
-            orig_shape = x_snn.shape
-            x_snn = bn1(x_snn.reshape(-1, self.dim, Lh*Lw))
-            x_snn = x_snn.view(orig_shape).permute(0, 1, 3, 2) # [T, B, L, C]
-            
-            x_snn = attn(x_snn, T=Lt, H=Lh, W=Lw)
-            x_snn = identity + x_snn
-            
-            # SNN Block 2: FFN
-            identity = x_snn
-            
-            x_snn = x_snn.permute(0, 1, 3, 2)
-            x_snn = bn2(x_snn.reshape(-1, self.dim, Lh*Lw))
-            x_snn = x_snn.view(orig_shape).permute(0, 1, 3, 2)
-            
-            x_snn = ffn1(x_snn)
-            x_snn = lif1(x_snn)
-            x_snn = ffn2(x_snn)
-            x_snn = lif2(x_snn)
-            x_snn = identity + x_snn
-            
-        # --- Integration & Head Phase ---
-        # SNN의 최종 출력 [T, B, L_spatial, dim]을 다시 ANN 업샘플러가 요구하는
-        # [B, dim, T, H, W] 차원으로 돌려놓습니다.
-        x_out = x_snn.permute(1, 3, 0, 2) # [B, dim, Lt, L_spatial]
-        x_out = x_out.view(b, self.dim, Lt, Lh, Lw) # [B, dim, Lt, Lh, Lw]
+        x_out = x.mean(dim=2).permute(1, 2, 0) # [B, dim, Lt]
+        x_out = F.interpolate(x_out, size=160, mode='linear', align_corners=True) # [B, dim, 160]
         
-        # Baseline Upsamplers (ANN)
-        # Lt=4 -> 8 -> 160 (configured via patches=(40, 4, 4))
-        features_up = self.baseline.upsample(x_out)
-        features_up2 = self.baseline.upsample2(features_up)
+        x_out = x_out.transpose(1, 2) # [B, 160, dim]
+        rppg = self.head(x_out).squeeze(-1) # [B, 160]
         
-        # Global Pooling and Prediction
-        features_mean = torch.mean(features_up2, dim=3) # Spatially
-        features_mean = torch.mean(features_mean, dim=3)
+        self.last_firing_rates = firing_rates
+        return rppg
         
-        rPPG = self.baseline.ConvBlockLast(features_mean).squeeze(1) # [B, 160]
-        
-        return rPPG, None, None, None
+        self.last_firing_rates = firing_rates
+        return rppg

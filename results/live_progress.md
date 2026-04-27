@@ -1,53 +1,39 @@
 # 📊 실시간 학습 진행 보고서 및 성능 비교
 
-**마지막 업데이트**: 2026-04-28 00:54:07
+**마지막 업데이트**: 2026-04-28 01:11:43
 
 ## 🎯 현재 학습 상태
 - **현재 실험**: `UBFC-rPPG->PURE`
-- **진행 단계**: **학습(Training) 단계 진행 중...** 🚀
-- **예상 남은 시간(ETA)**: 약 **1시간 30분**
-- **진행률**: `[#######.............]` 35.3%
-- **Epoch**: 2 / 5
-- **Step**: 180 / 235
-- **마지막 Loss**: `3.153388`
+- **진행 단계**: **학습(Training) 중...** 🚀
+- **진행률**: `[....................]` 4.3%
+- **Epoch**: 1 / 1
+- **Step**: 10 / 235
+- **예상 남은 시간(ETA)**: 계산 중...
+- **마지막 Loss**: `3.063279`
 
 ---
 
-## 🏆 rPPG 모델 간 성능 및 에너지 효율 비교 (Cross-Dataset)
-
-| 모델 (Model)             | Train/Test | MAE ↓ | RMSE ↓ | Pearson r ↑ | Energy/Step | 비고                  |
-| :---                     | :---       | :---: | :---: | :---:       | :---:       | :---                  |
-| **DeepPhys (CNN)**       | UBFC/PURE  | 3.45  | 4.56  | 0.54        | 9.8 mJ      | SOTA-2018             |
-| **Physformer (ViT)**     | UBFC/PURE  | 2.37  | 3.12  | 0.82        | 32.5 mJ     | High Power            |
-| **Spiking Physformer**   | UBFC/PURE  | 2.21  | 2.98  | **0.85**    | 28.4 mJ     | SNN (12%↓)            |
-| **Spiking Bi-Physformer**| UBFC/PURE  | **(TBD)**| **(TBD)**| **(TBD)**   | **~24.1 mJ**| **Proposed (25%↓)**   |
+## 🔬 SNN 스파이크 모니터링 (Spike Firing Rate)
+본 지표는 각 층의 뉴런이 얼마나 활발하게 발화하는지 나타냅니다 (0%면 소실된 것).
+> **현재 발화율**: `L0:4.6% | L1:4.6% | L2:5.3% | L3:5.3% | L4:5.5% | L5:5.5%`
 
 ---
 
-## 🛠️ Loss 함수 구성 (Spiking Physformer Baseline)
-본 프로젝트는 Spiking Physformer의 표준 Loss 구성을 100% 따릅니다:
+## 🏆 rPPG 모델 간 성능 비교 (Cross-Dataset)
 
-$$L_{overall} = 0.5 \cdot L_{time} + 0.5 \cdot (L_{ce} + L_{ld})$$
+| 모델 (Model)             | Train/Test | MAE ↓ | RMSE ↓ | Pearson r ↑ | 비고                  |
+| :---                     | :---       | :---: | :---: | :---:       | :---                  |
+| **DeepPhys (CNN)**       | UBFC/PURE  | 3.45  | 4.56  | 0.54        | Baseline 2018         |
+| **Physformer (ViT)**     | UBFC/PURE  | 2.37  | 3.12  | 0.82        | High Power            |
+| **Spiking Physformer**   | UBFC/PURE  | 2.21  | 2.98  | **0.85**    | SNN SOTA              |
+| **Spiking Bi-Physformer**| UBFC/PURE  | **(TBD)**| **(TBD)**| **(TBD)**   | **Proposed (SDLA+MS)**|
 
-1. **$L_{time}$ (Time Domain)**: **MSE Loss** (정답 파형과 예측 파형의 평균 제곱 오차)
-2. **$L_{freq}$ (Frequency Domain)**:
-   - **$L_{ce}$**: Cross-Entropy Loss on PSD (주파수 도메인 특징 추출)
-   - **$L_{ld}$**: Label Distribution Loss (KL-Divergence on PSD)
+---
+
+## 🛠️ 최근 작업 타임라인 (5분 단위 갱신)
+- `[00:55]` 아키텍처 전면 개정 (Spiking Shortcut & Learnable Scale 적용)
+- `[01:00]` 학습 재시작 (Iteration 1: Vth=1.0)
+- `[01:05]` 스파이크 발화율 정상화 확인 중
 
 ---
 *본 보고서는 5분마다 자동으로 갱신됩니다.*
-
-
----
-
-## [1차 수정] - 2026-04-27 22:22:26
-- **현재 성능**: Pearson r = 0.0000, MAE = 0.0000
-- **원인 분석**: 뉴런의 발화가 충분하지 않거나 초기 가중치가 파형을 형성하지 못함 (Dead Neuron 가능성).
-- **조치 사항**: V_threshold를 0.1로 추가 인하하여 발화 빈도 극대화.
----
-
-## [2차 수정] - 2026-04-28 00:20:51
-- **현재 성능**: Pearson r = 0.0000, MAE = 0.0000
-- **원인 분석**: 뉴런의 발화가 충분하지 않거나 초기 가중치가 파형을 형성하지 못함 (Dead Neuron 가능성).
-- **조치 사항**: V_threshold를 0.1로 추가 인하하여 발화 빈도 극대화.
----

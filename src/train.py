@@ -128,7 +128,8 @@ def run_experiment(train_ds, test_ds, epochs=30, batch_size=2, v_threshold=1.0, 
                     'total_epochs': epochs,
                     'step': i,
                     'total_steps': len(train_loader),
-                    'loss': loss.item()
+                    'loss': loss.item(),
+                    'firing_rates': getattr(model, 'last_firing_rates', [])
                 })
         
         print(f"Epoch {epoch+1} Avg Loss: {epoch_loss/len(train_loader):.6f}")
