@@ -81,23 +81,13 @@ class PhysBiformer(nn.Module):
             x_snn = identity + x_snn
             
         # --- Integration & Head Phase ---
-        # Instead of just mean, we could use the membrane potential of lif2 
-        # but following the user's "Rate Coding" logic for now: sum(dim=0)
-        x_out = torch.sum(x_snn, dim=0) # [B, L_spatial, dim]
-        
-        # Reshape for Upsampling
-        # We lost the temporal resolution in the SNN (it became steps).
-        # To get 160 points, we need to treat the output as features for the temporal dimension.
-        # However, rPPG models usually keep a temporal dimension.
-        # If Lt=4, x_out is 4 frames.
-        
-        # WAIT! If x_snn is [Lt, B, L, C], then x_snn[t] is the t-th temporal patch.
-        # So we should keep the Lt dimension!
-        x_out = x_snn.permute(1, 3, 0, 2).view(b, self.dim, Lt, Lh * Lw)
-        x_out = x_out.view(b, self.dim, Lt, Lh, Lw)
+        # SNN의 최종 출력 [T, B, L_spatial, dim]을 다시 ANN 업샘플러가 요구하는
+        # [B, dim, T, H, W] 차원으로 돌려놓습니다.
+        x_out = x_snn.permute(1, 3, 0, 2) # [B, dim, Lt, L_spatial]
+        x_out = x_out.view(b, self.dim, Lt, Lh, Lw) # [B, dim, Lt, Lh, Lw]
         
         # Baseline Upsamplers (ANN)
-        # If Lt=4, it will upsample to 160 if we configured patches=(40, 4, 4)
+        # Lt=4 -> 8 -> 160 (configured via patches=(40, 4, 4))
         features_up = self.baseline.upsample(x_out)
         features_up2 = self.baseline.upsample2(features_up)
         
