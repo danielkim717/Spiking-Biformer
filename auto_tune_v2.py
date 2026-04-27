@@ -61,7 +61,7 @@ def run_experiment(vth, lr, epochs=5):
 def main():
     iteration = 1
     # Starting configs
-    current_vth = 0.2
+    current_vth = 1.0
     current_lr = 3e-3
     
     while True:
