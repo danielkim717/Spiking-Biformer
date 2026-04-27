@@ -5,3 +5,6 @@
 [2026-04-27 22:22:26] FAILURE: Pearson 0.0 < 0.5. Analyzing...
 [2026-04-27 22:22:31] === Starting Iteration 2 ===
 [2026-04-27 22:22:31] Running Experiment: Vth=0.1, LR=0.003, Epochs=5
+[2026-04-28 00:20:51] FAILURE: Pearson 0.0 < 0.5. Analyzing...
+[2026-04-28 00:20:56] === Starting Iteration 3 ===
+[2026-04-28 00:20:56] Running Experiment: Vth=0.1, LR=0.003, Epochs=5
