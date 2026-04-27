@@ -94,6 +94,12 @@ $$L_{{overall}} = 0.5 \\cdot L_{{time}} + 0.5 \\cdot (L_{{ce}} + L_{{ld}})$$
         with open(live_report, 'w', encoding='utf-8') as f:
             f.write(report)
             
+            # 원인 분석 레포트 누적 추가
+            analysis_file = 'results/cause_analysis_report.md'
+            if os.path.exists(analysis_file):
+                with open(analysis_file, 'r', encoding='utf-8') as af:
+                    f.write("\n\n---\n" + af.read())
+            
         # 주기적 로그에도 추가
         with open('results/periodic_log.txt', 'a', encoding='utf-8') as f:
             f.write(f"[{datetime.now().strftime('%H:%M')}] {data['experiment']}, Epoch: {data['epoch']}, Loss: {data['loss']:.4f}\n")
