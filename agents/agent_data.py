@@ -50,21 +50,18 @@ def extract_zip(zip_path, extract_to):
         return False
 
 def run_data_pipeline():
-    os.makedirs('data', exist_ok=True)
-    # 사용자가 제공한 새로운 ID 반영
+    print("[Data Agent] Checking external dataset paths...")
+    
     datasets = {
-        'PURE': {'id': '1dxD19tZWcTb2l75lt8dAU_xbbtqPraYh', 'path': 'data/PURE.zip', 'dir': 'data/PURE'},
-        'UBFC-rPPG': {'id': '1CRJRtx1wFQ_ZDChmorZefHv0Vf_vNmcG', 'path': 'data/UBFC.zip', 'dir': 'data/UBFC'}
+        'PURE': 'D:\\PURE',
+        'UBFC-rPPG': 'D:\\UBFC-rPPG'
     }
-    for name, info in datasets.items():
-        is_empty = not os.path.exists(info['dir']) or not os.listdir(info['dir'])
-        if is_empty:
-            print(f"\n[Data Agent] Downloading {name} (New Link)...")
-            download_file_from_google_drive(info['id'], info['path'])
-            extract_zip(info['path'], info['dir'])
-            if os.path.exists(info['path']): os.remove(info['path'])
+    
+    for name, path in datasets.items():
+        if os.path.exists(path):
+            print(f"[Data Agent] {name} folder exists at {path}.")
         else:
-            print(f"[Data Agent] {name} folder exists.")
+            print(f"[!] [Data Agent] WARNING: {name} not found at {path}. Please check external SSD.")
 
 if __name__ == "__main__":
     run_data_pipeline()

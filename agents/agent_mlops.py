@@ -22,24 +22,28 @@ def git_commit_and_push(message):
 def run_mlops_cycle():
     print("=== Spiking Bi-Physformer MLOps Cycle 시작 ===")
     
-    # 1. 데이터 확보 시도
+    # 1. 데이터 확보 시도 (경로 확인)
     run_data_pipeline()
     
-    # 2. 실험 큐 (Queue) 정의
+    # 2. Cross Dataset 실험 큐 (Queue) 정의
     experiments = [
-        {'name': 'PURE', 'path': 'data/PURE'},
-        {'name': 'UBFC-rPPG', 'path': 'data/UBFC'},
+        {'train': 'UBFC-rPPG', 'test': 'PURE'},
+        {'train': 'PURE', 'test': 'UBFC-rPPG'}
     ]
     
+    # 비교표 초기 생성
+    subprocess.run(['python', 'scripts/compare_metrics.py'])
+
     for exp in experiments:
-        if os.path.exists(exp['path']) and os.listdir(exp['path']):
-            print(f"\n[MLOps] {exp['name']} 학습 데이터 확인됨. 실험 시작.")
-            run_experiment(exp['name'], exp['path'])
-            
-            # 실험 완료 후 자동 푸시
-            git_commit_and_push(f"chore: {exp['name']} experimental results and metrics updated")
-        else:
-            print(f"\n[MLOps] {exp['name']} 데이터가 아직 준비되지 않았습니다. 건너뜁니다.")
+        print(f"\n[MLOps] Cross-dataset 학습 시작: {exp['train']} -> {exp['test']}")
+        # 빠른 테스트를 위해 epochs를 작게 설정
+        run_experiment(exp['train'], exp['test'], epochs=5, batch_size=2)
+        
+        # 실험 완료 후 비교표 갱신
+        subprocess.run(['python', 'scripts/compare_metrics.py'])
+        
+        # 실험 완료 후 자동 푸시
+        git_commit_and_push(f"chore: {exp['train']}->{exp['test']} cross dataset results updated")
 
     print("\n=== MLOps Cycle 종료. 주기적으로 재실행 대기. ===")
 

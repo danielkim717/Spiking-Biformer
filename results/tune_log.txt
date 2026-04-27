@@ -1,0 +1,6 @@
+[2026-04-27 14:11:03] === AutoTune V2 (Watchdog Enabled) Started ===
+[2026-04-27 14:11:03] Starting Run: Vth=0.1, LR=0.003
+[2026-04-27 14:14:30] === AutoTune V2 (Watchdog Enabled) Started ===
+[2026-04-27 14:14:30] Starting Run: Vth=0.1, LR=0.003
+[2026-04-27 15:03:23] ERROR: Process Timeout!
+[2026-04-27 15:03:23] Starting Run: Vth=0.1, LR=0.01

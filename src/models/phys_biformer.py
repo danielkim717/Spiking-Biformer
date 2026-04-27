@@ -1,73 +1,93 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from src.models.baseline.Physformer import ViT_ST_ST_Compact3_TDC_gra_sharp
 from src.models.biformer_attention import BiLevelRoutingAttention
-import torch.nn.functional as F
 
-from spikingjelly.activation_based import neuron, surrogate
+from spikingjelly.activation_based import neuron, surrogate, functional
 
 class PhysBiformer(nn.Module):
-    def __init__(self, frame=160, patches=(4, 4, 4), dim=64, num_heads=4, n_win=8, topk=4):
+    def __init__(self, frame=160, patches=(4, 4, 4), dim=64, num_heads=4, n_win=8, topk=4, v_threshold=1.0, T=4):
         super().__init__()
-        self.baseline = ViT_ST_ST_Compact3_TDC_gra_sharp(frame=frame, patches=patches, dim=dim, num_heads=num_heads, image_size=(160, 128, 128))
+        self.T = T # SNN simulation timesteps
+        self.dim = dim
+        self.patches = patches
         
-        # SNN components
-        self.lif_input = neuron.LIFNode(surrogate_function=surrogate.ATan(), detach_reset=True)
+        # 1. ANN Stem & Patch Embedding
+        self.baseline = ViT_ST_ST_Compact3_TDC_gra_sharp(
+            frame=frame, patches=patches, dim=dim, num_heads=num_heads, image_size=(160, 128, 128)
+        )
         
-        self.biformer_blocks = nn.ModuleList([
+        # 2. SNN Transformer Blocks
+        # We replace the original transformer layers with our Spiking Biformer blocks
+        self.lif_input = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0, surrogate_function=surrogate.ATan(alpha=2.0), detach_reset=True)
+        
+        self.blocks = nn.ModuleList([
             nn.ModuleList([
                 nn.LayerNorm(dim),
-                BiLevelRoutingAttention(dim=dim, num_heads=num_heads, n_win=n_win, topk=topk),
+                BiLevelRoutingAttention(dim=dim, num_heads=num_heads, n_win=n_win, topk=topk, v_threshold=v_threshold),
                 nn.LayerNorm(dim),
                 nn.Linear(dim, dim * 4),
-                neuron.LIFNode(surrogate_function=surrogate.ATan(), detach_reset=True), # GELU -> LIF
+                neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0, surrogate_function=surrogate.ATan(alpha=2.0), detach_reset=True),
                 nn.Linear(dim * 4, dim),
-                neuron.LIFNode(surrogate_function=surrogate.ATan(), detach_reset=True)  # Added LIF for post-FFN spikes
+                neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0, surrogate_function=surrogate.ATan(alpha=2.0), detach_reset=True)
             ]) for _ in range(3)
         ])
-
-    def forward(self, x, gra_sharp=None):
+        
+    def forward(self, x):
+        # x: [B, 3, 160, 128, 128]
         b, c, t, h, w = x.shape
         
-        # Stem and Patch Embedding (Real-valued initial layers)
+        # ANN Stem Phase
         x = self.baseline.Stem0(x)
         x = self.baseline.Stem1(x)
         x = self.baseline.Stem2(x)
-        x = self.baseline.patch_embedding(x) # [B, dim, T', H', W']
+        x = self.baseline.patch_embedding(x) # [B, dim, Lt, Lh, Lw] e.g. [B, 64, 40, 4, 4]
         
-        # 1. Convert to Spikes and Reshape for SNN [T, B, N, C]
-        # Preserve time dimension (t_p) instead of flattening it
-        t_p, h_p, w_p = x.shape[2], x.shape[3], x.shape[4]
-        x = x.permute(2, 0, 3, 4, 1).reshape(t_p, b, h_p * w_p, -1) # [T, B, N_spatial, C]
+        Lt, Lh, Lw = x.shape[2], x.shape[3], x.shape[4]
+        # [B, dim, Lt, Lh, Lw] -> [B, Lt, Lh, Lw, dim]
+        x = x.permute(0, 2, 3, 4, 1).contiguous()
         
-        # Initial LIF to ensure spike format
-        x = self.lif_input(x)
+        # --- SNN Simulation Phase ---
+        # Repeat input for T simulation steps: [T, B, Lt, Lh, Lw, dim]
+        x_snn = x.unsqueeze(0).repeat(self.T, 1, 1, 1, 1, 1) 
+        x_snn = x_snn.flatten(2, 4) # [T, B, L_total, dim] where L_total = Lt*Lh*Lw
         
-        for block in self.biformer_blocks:
-            norm1, attn, norm2, fc1, lif1, fc2, lif2 = block
+        # Initial Spike conversion
+        x_snn = self.lif_input(x_snn)
+        
+        for ln1, attn, ln2, ffn1, lif1, ffn2, lif2 in self.blocks:
+            # SNN Block 1: Attention
+            identity = x_snn
+            x_snn = ln1(x_snn)
+            x_snn = attn(x_snn, T=Lt, H=Lh, W=Lw) # BRA processes [T, B, L, D]
+            x_snn = identity + x_snn
             
-            # Block 1: Attention (Spike-In -> Spike-Out)
-            attn_out = attn(norm1(x), T=t_p, H=h_p, W=w_p)
-            x = x + attn_out
+            # SNN Block 2: FFN
+            identity = x_snn
+            x_snn = ln2(x_snn)
+            x_snn = ffn1(x_snn)
+            x_snn = lif1(x_snn)
+            x_snn = ffn2(x_snn)
+            x_snn = lif2(x_snn)
+            x_snn = identity + x_snn
             
-            # Block 2: FFN (Spike-In -> Spike-Out)
-            ffn_out = lif2(fc2(lif1(fc1(norm2(x)))))
-            x = x + ffn_out
-            
-        # 2. Output Head Processing
-        # Aggregate back for rPPG extraction
-        # x is [T, B, N_spatial, C]
-        seq_len = x.shape[2]
-        # Reshape to [B, C, T, H, W] for baseline upsampling
-        out = x.permute(1, 3, 0, 2).reshape(b, -1, t_p, h_p, w_p)
+        # --- Integration & Head Phase ---
+        # Average spikes over simulation time T: [B, L_total, dim]
+        x_out = torch.mean(x_snn, dim=0) 
         
-        # Upsampling and global pooling
-        features_last = self.baseline.upsample(out)
-        features_last = self.baseline.upsample2(features_last)
-        features_last = torch.sum(features_last, 3)
-        features_last = torch.sum(features_last, 3)
+        # Reshape for Upsampling: [B, dim, Lt, Lh, Lw]
+        x_out = x_out.view(b, Lt, Lh, Lw, self.dim).permute(0, 4, 1, 2, 3)
         
-        rPPG = self.baseline.ConvBlockLast(features_last)
-        rPPG = rPPG.squeeze(1)
+        # Baseline Upsamplers (ANN)
+        # Lt=40 -> 80 -> 160
+        features_up = self.baseline.upsample(x_out)
+        features_up2 = self.baseline.upsample2(features_up)
+        
+        # Global Pooling and Prediction
+        features_mean = torch.mean(features_up2, dim=3) # Spatially
+        features_mean = torch.mean(features_mean, dim=3)
+        
+        rPPG = self.baseline.ConvBlockLast(features_mean).squeeze(1) # [B, 160]
+        
         return rPPG, None, None, None
-
