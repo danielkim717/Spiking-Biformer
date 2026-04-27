@@ -1,0 +1,5 @@
+# Spiking Bi-Physformer 실험 결과
+
+| 데이터셋 | 상태 | MAE | RMSE | Pearson r | 비고 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| UBFC-rPPG->PURE | 완료 | 0.9690 | 1.1201 | 0.0018 | RTX 4060 학습 |
