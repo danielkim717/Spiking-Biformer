@@ -1,2 +1,2 @@
-[2026-04-27 16:24:35] === Starting Iteration 1 ===
-[2026-04-27 16:24:35] Running Experiment: Vth=0.2, LR=0.003, Epochs=5
+[2026-04-27 16:31:46] === Starting Iteration 1 ===
+[2026-04-27 16:31:46] Running Experiment: Vth=0.2, LR=0.003, Epochs=5
