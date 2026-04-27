@@ -1,5 +1,2 @@
-[2026-04-27 16:31:46] === Starting Iteration 1 ===
-[2026-04-27 16:31:46] Running Experiment: Vth=0.2, LR=0.003, Epochs=5
-[2026-04-27 18:19:43] FAILURE: Pearson 0.0 < 0.5. Analyzing...
-[2026-04-27 18:19:48] === Starting Iteration 2 ===
-[2026-04-27 18:19:48] Running Experiment: Vth=0.1, LR=0.003, Epochs=5
+[2026-04-27 18:42:34] === Starting Iteration 1 ===
+[2026-04-27 18:42:34] Running Experiment: Vth=1.0, LR=0.003, Epochs=5
