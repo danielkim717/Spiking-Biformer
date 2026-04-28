@@ -24,6 +24,7 @@ class PhysBiformerBlock(nn.Module):
         identity = x
         
         # Sub-block 1: Attention
+        # x shape: [Lt, b, L, dim] -> [Lt*b, dim, L] for BatchNorm
         x_norm = self.bn1(x.transpose(-1, -2).reshape(-1, dim, L)).reshape(Lt, b, dim, L).transpose(-1, -2)
         spikes = self.lif1(x_norm)
         self.last_firing_rate1 = spikes.mean().item()
@@ -46,16 +47,17 @@ class PhysBiformer(nn.Module):
         self.num_blocks = num_blocks
         self.frame = frame
         
-        # Stem (ANN)
+        # Stem (ANN) - Implementing Temporal Patching (T=160 -> T=4)
+        # stride=(patches[0], 1, 1) means we compress the temporal axis by 40x in the first layer.
         self.stem = nn.Sequential(
-            nn.Conv3d(3, 16, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
+            nn.Conv3d(3, 16, kernel_size=(3, 3, 3), stride=(patches[0], 1, 1), padding=(1, 1, 1)),
             nn.BatchNorm3d(16),
             nn.ReLU(),
-            nn.MaxPool3d(kernel_size=(1, 2, 2)),
+            nn.MaxPool3d(kernel_size=(1, 2, 2)), # H/2, W/2
             nn.Conv3d(16, dim, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
             nn.BatchNorm3d(dim),
             nn.ReLU(),
-            nn.MaxPool3d(kernel_size=(1, 2, 2))
+            nn.MaxPool3d(kernel_size=(1, 2, 2))  # H/4, W/4
         )
         
         self.lif_input = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0, surrogate_function=surrogate.ATan(alpha=2.0), detach_reset=True)
@@ -67,11 +69,18 @@ class PhysBiformer(nn.Module):
         self.head = nn.Linear(dim, 1)
 
     def forward(self, x):
+        """
+        x: [B, 3, 160, H, W]
+        """
         b, c, t, h, w = x.shape
-        x = self.stem(x)
+        
+        # 1. Stem (ANN) -> Temporal Patching
+        x = self.stem(x) # [B, dim, Lt, H', W'] where Lt = 160/40 = 4
         _, dim, Lt, Lh, Lw = x.shape
         L = Lh * Lw
         
+        # 2. SNN Transition
+        # Permute for SNN: [Lt, B, L, dim]
         x = x.permute(2, 0, 3, 4, 1).reshape(Lt, b, L, dim)
         x = self.lif_input(x)
         
@@ -81,14 +90,15 @@ class PhysBiformer(nn.Module):
             firing_rates.append(block.last_firing_rate1)
             firing_rates.append(block.last_firing_rate2)
             
+        # 3. Head (ANN)
+        # Average across spatial dimensions: [Lt, B, L, dim] -> [Lt, B, dim]
         x_out = x.mean(dim=2).permute(1, 2, 0) # [B, dim, Lt]
-        x_out = F.interpolate(x_out, size=160, mode='linear', align_corners=True) # [B, dim, 160]
+        
+        # Upsample back to 160 frames: [B, dim, 4] -> [B, dim, 160]
+        x_out = F.interpolate(x_out, size=self.frame, mode='linear', align_corners=True)
         
         x_out = x_out.transpose(1, 2) # [B, 160, dim]
         rppg = self.head(x_out).squeeze(-1) # [B, 160]
-        
-        self.last_firing_rates = firing_rates
-        return rppg
         
         self.last_firing_rates = firing_rates
         return rppg
