@@ -1,1 +1,1 @@
-{"experiment": "UBFC-rPPG->PURE", "epoch": 6, "total_epochs": 30, "step": 0, "total_steps": 375, "loss": 0.0, "phase": "Evaluation"}
+{"experiment": "UBFC-rPPG->PURE", "epoch": 6, "total_epochs": 30, "step": 50, "total_steps": 375, "loss": 0.0, "phase": "Evaluation"}
