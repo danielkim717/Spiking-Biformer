@@ -34,7 +34,6 @@ def generate_report():
         # Calculate ETA
         eta_str = "계산 중..."
         try:
-            # Simple linear ETA estimation
             if data['step'] > 10:
                 elapsed = 300 # assumed 5 min loop
                 remaining_steps = data['total_steps'] - data['step']
@@ -75,14 +74,21 @@ def generate_report():
 
 ---
 
-## 🛠️ 최근 작업 타임라인 (5분 단위 갱신)
-- `[00:55]` 아키텍처 전면 개정 (Spiking Shortcut & Learnable Scale 적용)
-- `[01:00]` 학습 재시작 (Iteration 1: Vth=1.0)
-- `[01:05]` 스파이크 발화율 정상화 확인 중
+## 🛠️ 최근 작업 타임라인 (실시간 갱신)
+- `[10:43]` **Temporal Patching (T=4)** 구조 전면 적용 (Stem 레이어 Stride 수정)
+- `[10:45]` 원인 분석 보고서(Cause Analysis Report) 전면 리팩토링 및 가시성 확보
+- `[10:46]` **30-Epoch 정밀 학습** 재시작 (목표: 피어슨 r > 0.5)
 
 ---
 *본 보고서는 5분마다 자동으로 갱신됩니다.*
+
 """
+        # Append Cause Analysis if exists
+        analysis_file = 'results/cause_analysis_report.md'
+        if os.path.exists(analysis_file):
+            with open(analysis_file, 'r', encoding='utf-8') as af:
+                report += "\n\n" + af.read()
+
         with open(live_report, 'w', encoding='utf-8') as f:
             f.write(report)
         
