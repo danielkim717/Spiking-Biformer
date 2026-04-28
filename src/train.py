@@ -1,5 +1,6 @@
 """
 학습 로그 및 상태 상세 기록을 포함한 Train 스크립트.
+에포크마다 평가를 수행하도록 개선되었습니다.
 """
 import os
 import json
@@ -76,18 +77,13 @@ def run_experiment(train_ds, test_ds, epochs=30, batch_size=2, v_threshold=1.0, 
         'UBFC-rPPG': 'D:\\UBFC-rPPG'
     }
     
-    # 주파수(BPM) 분석을 위해 클립 길이를 160프레임(약 5.3초)으로 설정해야 FFT가 동작함.
-    print(f"[*] Loading Train Dataset: {train_ds}...")
     train_loader = get_dataloader(train_ds, dataset_paths[train_ds], batch_size, clip_len=160)
-    print(f"[*] Loading Test Dataset: {test_ds}...")
     test_loader = get_dataloader(test_ds, dataset_paths[test_ds], batch_size, clip_len=160)
 
     if len(train_loader) == 0 or len(test_loader) == 0:
-        print(f"[!] {train_ds} 또는 {test_ds} 샘플을 찾지 못했습니다. 데이터 경로를 확인하세요.")
+        print(f"[!] {train_ds} 또는 {test_ds} 샘플을 찾지 못했습니다.")
         return
 
-    # 논문과 동일하게 SNN Timestep T=4를 사용하기 위해 temporal patch 크기를 40으로 설정 (160 / 40 = 4)
-    # 이제 비디오의 시간 차원이 곧 SNN의 타임스텝이 됩니다.
     model = PhysBiformer(frame=160, patches=(40, 4, 4), v_threshold=v_threshold).to(device)
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=5e-5)
     mse_criterion = nn.MSELoss()
@@ -99,26 +95,21 @@ def run_experiment(train_ds, test_ds, epochs=30, batch_size=2, v_threshold=1.0, 
         epoch_loss = 0
         for i, (inputs, labels) in enumerate(train_loader):
             inputs, labels = inputs.to(device), labels.to(device)
+            
             optimizer.zero_grad()
             outputs = model(inputs)
-            if isinstance(outputs, tuple):
-                outputs = outputs[0]
-            if outputs.shape[1] != labels.shape[1]:
-                import torch.nn.functional as F
-                outputs = F.interpolate(outputs.unsqueeze(1), size=labels.shape[1], mode='linear', align_corners=False).squeeze(1)
-            functional.reset_net(model)
             
-            # L_time = MSE (Spiking Physformer Baseline)
-            loss_time = mse_criterion(outputs, labels)
-            
-            # L_freq = CE + LD
+            loss_mse = mse_criterion(outputs, labels)
+            loss_pearson = pearson_criterion(outputs, labels)
             loss_ce, loss_ld = freq_criterion(outputs, labels)
             
-            # L_overall = 0.5 * L_time + 0.5 * (L_ce + L_ld)
-            loss = 0.5 * loss_time + 0.5 * (loss_ce + loss_ld)
+            # Weighted loss based on Spiking Physformer
+            loss = 0.5 * loss_mse + 0.5 * (loss_ce + loss_ld)
+            
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
+            functional.reset_net(model)
             
             if i % 10 == 0:
                 print(f"Epoch {epoch+1}, Step {i}/{len(train_loader)}, Loss: {loss.item():.6f}")
@@ -129,48 +120,41 @@ def run_experiment(train_ds, test_ds, epochs=30, batch_size=2, v_threshold=1.0, 
                     'step': i,
                     'total_steps': len(train_loader),
                     'loss': loss.item(),
+                    'phase': 'Training',
                     'firing_rates': getattr(model, 'last_firing_rates', [])
                 })
         
         print(f"Epoch {epoch+1} Avg Loss: {epoch_loss/len(train_loader):.6f}")
         
-    # Evaluation phase
-    print("[*] Starting Evaluation on Test Dataset...")
-    model.eval()
-    all_preds = []
-    all_gts = []
-    with torch.no_grad():
-        for j, (inputs, labels) in enumerate(test_loader):
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model(inputs)
-            if isinstance(outputs, tuple):
-                outputs = outputs[0]
-            if outputs.shape[1] != labels.shape[1]:
-                import torch.nn.functional as F
-                outputs = F.interpolate(outputs.unsqueeze(1), size=labels.shape[1], mode='linear', align_corners=False).squeeze(1)
-            functional.reset_net(model)
-            all_preds.append(outputs.cpu())
-            all_gts.append(labels.cpu())
-            
-            # Save evaluation progress every 10 steps
-            if j % 10 == 0:
-                print(f"Eval Step {j}/{len(test_loader)}")
-                save_status({
-                    'experiment': f"{train_ds}->{test_ds}",
-                    'epoch': epoch + 1,
-                    'total_epochs': epochs,
-                    'step': j,
-                    'total_steps': len(test_loader),
-                    'loss': 0.0,
-                    'phase': 'Evaluation'
-                })
-            
-    all_preds = torch.cat(all_preds)
-    all_gts = torch.cat(all_gts)
-    
-    metrics = calculate_metrics(all_preds, all_gts)
-    print(f"[*] Evaluation Results: {metrics}")
-    update_experiment_summary(f"{train_ds}->{test_ds}", metrics)
+        # Intermediate Evaluation every epoch
+        print(f"[*] Starting Evaluation for Epoch {epoch+1}...")
+        model.eval()
+        all_preds = []
+        all_gts = []
+        with torch.no_grad():
+            for j, (inputs, labels) in enumerate(test_loader):
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = model(inputs)
+                functional.reset_net(model)
+                all_preds.append(outputs.cpu())
+                all_gts.append(labels.cpu())
+                
+                if j % 10 == 0:
+                    save_status({
+                        'experiment': f"{train_ds}->{test_ds}",
+                        'epoch': epoch + 1,
+                        'total_epochs': epochs,
+                        'step': j,
+                        'total_steps': len(test_loader),
+                        'loss': 0.0,
+                        'phase': 'Evaluation'
+                    })
+                    
+        all_preds = torch.cat(all_preds)
+        all_gts = torch.cat(all_gts)
+        metrics = calculate_metrics(all_preds, all_gts)
+        print(f"[*] Epoch {epoch+1} Results: {metrics}")
+        update_experiment_summary(f"{train_ds}->{test_ds}", metrics)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
