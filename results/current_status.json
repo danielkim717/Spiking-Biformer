@@ -1,1 +1,1 @@
-{"experiment": "UBFC-rPPG->PURE", "epoch": 19, "total_epochs": 30, "step": 220, "total_steps": 235, "loss": 2.2694339752197266, "phase": "Training", "firing_rates": [0.04404182359576225, 0.0408809669315815, 0.04792442545294762, 0.0435449592769146, 0.04776019975543022, 0.043496131896972656]}
+{"experiment": "UBFC-rPPG->PURE", "epoch": 19, "total_epochs": 30, "step": 30, "total_steps": 375, "loss": 0.0, "phase": "Evaluation"}
