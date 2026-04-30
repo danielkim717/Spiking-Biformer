@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($d = git diff HEAD -- src/train.py 2>&1 | Out-String; Write-Output \\(\"LEN=\" + $d.Length\\); Write-Output $d)"
+    ]
+  }
+}
