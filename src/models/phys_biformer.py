@@ -16,7 +16,7 @@ class PhysBiformerBlock(nn.Module):
         self.lif2 = neuron.LIFNode(v_threshold=v_threshold, v_reset=None, surrogate_function=surrogate.ATan(), detach_reset=True)
         self.ffn = nn.Sequential(
             layer.Conv3d(dim, dim * 4, kernel_size=1),
-            layer.GELU(),
+            nn.GELU(),
             layer.Conv3d(dim * 4, dim, kernel_size=1)
         )
         self.scale = nn.Parameter(torch.ones(1) * 0.5)
