@@ -103,8 +103,8 @@ def run_experiment(train_ds, test_ds, epochs=30, batch_size=2, v_threshold=1.0, 
             loss_pearson = pearson_criterion(outputs, labels)
             loss_ce, loss_ld = freq_criterion(outputs, labels)
             
-            # Weighted loss based on Spiking Physformer
-            loss = 0.5 * loss_mse + 0.5 * (loss_ce + loss_ld)
+            # Weighted loss: MSE + Freq + Pearson (for better shape)
+            loss = 0.5 * loss_mse + 0.5 * (loss_ce + loss_ld) + 0.1 * loss_pearson
             
             loss.backward()
             optimizer.step()
