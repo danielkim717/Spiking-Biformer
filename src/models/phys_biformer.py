@@ -1,13 +1,13 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from spikingjelly.activation_based import neuron, surrogate, layer
+from spikingjelly.activation_based import neuron, surrogate, layer, functional
 from src.models.biformer_attention import BiLevelRoutingAttention
 
 class PhysBiformerBlock(nn.Module):
-    def __init__(self, dim, num_heads, v_threshold, n_win=(4, 4, 4)):
+    def __init__(self, dim, num_heads, v_threshold, n_win=(2, 4, 4)):
         super().__init__()
-        # Use spikingjelly's BatchNorm for better SNN compatibility
+        # Use spikingjelly's layer wrappers and set multi-step mode
         self.bn1 = layer.BatchNorm3d(dim)
         self.lif1 = neuron.LIFNode(v_threshold=v_threshold, v_reset=None, surrogate_function=surrogate.ATan(), detach_reset=True)
         self.attn = BiLevelRoutingAttention(dim, num_heads=num_heads, n_win=n_win, v_threshold=v_threshold)
@@ -20,18 +20,19 @@ class PhysBiformerBlock(nn.Module):
             layer.Conv3d(dim * 4, dim, kernel_size=1)
         )
         self.scale = nn.Parameter(torch.ones(1) * 0.5)
+        
+        # Ensure all sub-modules use multi-step mode
+        functional.set_step_mode(self, step_mode='m')
 
     def forward(self, x):
         """
-        x: [T, B, C, Lt, Lh, Lw] (Potential Path)
+        x: [T, B, C, Lt, Lh, Lw] (Potential Path - Real Valued)
         """
-        # Membrane Shortcut (MS): x = x + attn(lif(x))
-        # Note: In MS, identity is the potential/float signal.
         identity = x
         
         # Sub-block 1: Attention
         x_norm = self.bn1(x)
-        spikes = self.lif1(x_norm) # [T, B, C, Lt, Lh, Lw]
+        spikes = self.lif1(x_norm) 
         self.last_firing_rate1 = spikes.mean().item()
         
         # Attention expects [T, B, Lt, Lh, Lw, C]
@@ -39,6 +40,7 @@ class PhysBiformerBlock(nn.Module):
         attn_out = self.attn(spikes_attn)
         attn_out = attn_out.permute(0, 1, 5, 2, 3, 4) # [T, B, C, Lt, Lh, Lw]
         
+        # MS Shortcut: Identity (Potential) + Attn(Spikes)
         x = identity + attn_out * self.scale
         
         # Sub-block 2: FFN
@@ -68,18 +70,19 @@ class PhysBiformer(nn.Module):
             nn.ReLU()
         )
         
-        # 3. Temporal Positional Embedding
-        # 160 / 4 = 40
+        # Temporal Positional Embedding
         self.pos_embed = nn.Parameter(torch.zeros(1, dim, 40, 1, 1))
         
-        self.lif_input = neuron.LIFNode(v_threshold=v_threshold, v_reset=None, surrogate_function=surrogate.ATan(), detach_reset=True)
+        # Removed lif_input to preserve MS Shortcut benefits from the start
         
-        # Set n_win for attention (Lt=40, Lh=32, Lw=32 -> wins of 4x4x4)
         self.blocks = nn.ModuleList([
-            PhysBiformerBlock(dim, num_heads, v_threshold, n_win=(4, 4, 4)) for _ in range(num_blocks)
+            PhysBiformerBlock(dim, num_heads, v_threshold, n_win=(2, 4, 4)) for _ in range(num_blocks)
         ])
             
         self.head = nn.Linear(dim, 1)
+        
+        # Set entire model to multi-step mode
+        functional.set_step_mode(self, step_mode='m')
 
     def forward(self, x):
         """
@@ -87,16 +90,14 @@ class PhysBiformer(nn.Module):
         """
         b, c, t, h, w = x.shape
         
-        # 1. Stem (ANN)
-        x = self.stem(x) # [B, dim, Lt, Lh, Lw]
+        # 1. Stem (ANN) -> Real-valued features
+        x = self.stem(x) 
         x = x + self.pos_embed[:, :, :x.shape[2], :, :]
         
-        # 2. SNN Transition (Constant Current I)
-        # Repeat input for T_snn steps to simulate SNN dynamics properly
+        # 2. SNN Potential Path Initialization
+        # Repeat real-valued input for T_snn steps. 
+        # This acts as a constant current I injected into the first SNN block.
         x = x.unsqueeze(0).repeat(self.T_snn, 1, 1, 1, 1, 1) # [T, B, C, Lt, Lh, Lw]
-        
-        # Potential Path starts here
-        x = self.lif_input(x) # Initial spikes conversion
         
         firing_rates = []
         for block in self.blocks:
@@ -105,16 +106,15 @@ class PhysBiformer(nn.Module):
             firing_rates.append(block.last_firing_rate2)
             
         # 3. Head (ANN)
-        # Average across SNN time: [T, B, C, Lt, Lh, Lw] -> [B, C, Lt, Lh, Lw]
+        # Final output is the mean of the membrane potential across T
         x_out = x.mean(dim=0)
         
         # Spatial Global Average Pooling
         x_out = x_out.mean(dim=(3, 4)) # [B, C, Lt]
         
-        # Upsample to target temporal length (160)
+        # Upsample Lt to Target (160)
         x_out = F.interpolate(x_out, size=self.frame, mode='linear', align_corners=True)
         
-        # Final Projection
         x_out = x_out.transpose(1, 2) # [B, 160, C]
         rppg = self.head(x_out).squeeze(-1) # [B, 160]
         
