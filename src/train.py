@@ -14,6 +14,8 @@ from src.models.phys_biformer import PhysBiformer
 from src.data.rppg_dataset import get_dataloader
 from src.utils.metrics import calculate_metrics, update_experiment_summary
 
+torch.backends.cudnn.benchmark = True
+
 def save_status(status):
     with open('results/current_status.json', 'w') as f:
         json.dump(status, f)
@@ -66,7 +68,7 @@ class FrequencyLoss(nn.Module):
         
         return loss_ce, loss_ld
 
-def run_experiment(train_ds, test_ds, epochs=30, batch_size=2, v_threshold=1.0, lr=3e-3):
+def run_experiment(train_ds, test_ds, epochs=30, batch_size=2, v_threshold=0.5, lr=1e-3):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"[*] Starting Experiment: {train_ds} -> {test_ds} on {device} (V_th={v_threshold}, LR={lr})")
 
@@ -84,9 +86,10 @@ def run_experiment(train_ds, test_ds, epochs=30, batch_size=2, v_threshold=1.0, 
         print(f"[!] {train_ds} 또는 {test_ds} 샘플을 찾지 못했습니다.")
         return
 
-    model = PhysBiformer(frame=160, patches=(4, 4, 4), v_threshold=v_threshold).to(device)
+    model = PhysBiformer(frame=160, patches=(4, 4, 4), v_threshold=v_threshold,
+                         n_win=(4, 4, 4), topk=4).to(device)
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=5e-5)
-    mse_criterion = nn.MSELoss()
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs * max(1, len(train_loader)))
     pearson_criterion = NegPearsonLoss()
     freq_criterion = FrequencyLoss(fps=30)
 
@@ -99,20 +102,34 @@ def run_experiment(train_ds, test_ds, epochs=30, batch_size=2, v_threshold=1.0, 
             optimizer.zero_grad()
             outputs = model(inputs)
 
-            loss_mse = mse_criterion(outputs, labels)
             loss_pearson = pearson_criterion(outputs, labels)
             loss_ce, loss_ld = freq_criterion(outputs, labels)
 
-            # Weighted loss: MSE + Freq + Pearson (for better shape)
-            loss = 0.5 * loss_mse + 0.5 * (loss_ce + loss_ld) + 0.1 * loss_pearson
+            # Pearson-dominant loss: PhysFormer-style waveform shape supervision
+            # plus frequency-domain regularisation. The MSE term used to be
+            # dominant which caused the model to settle on a near-zero output
+            # (target is z-normalised) and hide the failure as "low loss".
+            loss = loss_pearson + 0.2 * loss_ce + 0.2 * loss_ld
+
+            if not torch.isfinite(loss):
+                print(f"[!] Non-finite loss at epoch {epoch+1} step {i}, skipping batch")
+                optimizer.zero_grad()
+                functional.reset_net(model)
+                continue
 
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
+            scheduler.step()
             epoch_loss += loss.item()
             functional.reset_net(model)
 
             if i % 10 == 0:
-                print(f"Epoch {epoch+1}, Step {i}/{len(train_loader)}, Loss: {loss.item():.6f}")
+                fr = getattr(model, 'last_firing_rates', [])
+                fr_str = ', '.join(f"{r:.3f}" for r in fr) if fr else 'n/a'
+                print(f"Epoch {epoch+1}, Step {i}/{len(train_loader)}, "
+                      f"Loss: {loss.item():.4f}, Pearson1-r: {1.0-loss_pearson.item():.4f}, "
+                      f"FR: [{fr_str}]")
                 save_status({
                     'experiment': f"{train_ds}->{test_ds}",
                     'epoch': epoch + 1,
@@ -121,7 +138,7 @@ def run_experiment(train_ds, test_ds, epochs=30, batch_size=2, v_threshold=1.0, 
                     'total_steps': len(train_loader),
                     'loss': loss.item(),
                     'phase': 'Training',
-                    'firing_rates': getattr(model, 'last_firing_rates', [])
+                    'firing_rates': fr,
                 })
         
         print(f"Epoch {epoch+1} Avg Loss: {epoch_loss/len(train_loader):.6f}")
@@ -161,7 +178,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_ds', type=str, required=True)
     parser.add_argument('--test_ds', type=str, required=True)
     parser.add_argument('--epochs', type=int, default=30)
-    parser.add_argument('--v_threshold', type=float, default=1.0)
-    parser.add_argument('--lr', type=float, default=3e-3)
+    parser.add_argument('--v_threshold', type=float, default=0.5)
+    parser.add_argument('--lr', type=float, default=1e-3)
     args = parser.parse_args()
     run_experiment(args.train_ds, args.test_ds, args.epochs, v_threshold=args.v_threshold, lr=args.lr)
