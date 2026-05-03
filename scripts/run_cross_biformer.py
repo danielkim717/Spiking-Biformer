@@ -37,7 +37,7 @@ from src.train import NegPearsonLoss, FrequencyLoss
 
 
 EPOCHS = 10
-BATCH_SIZE = 2
+BATCH_SIZE = 4   # paper 명시값 (BN running stats 안정화)
 LR = 3e-3
 WD = 5e-5
 ALPHA = 0.1            # NegPearson 가중치 (고정)
@@ -46,6 +46,10 @@ ETA = 5.0              # β 지수 베이스 → epoch 끝에 β = β₀·η^((E
 DETECTION_FREQ = 30    # rPPG-Toolbox DYNAMIC_DETECTION_FREQUENCY
 PURE_PATH = 'D:\\PURE'
 UBFC_PATH = 'D:\\UBFC-rPPG'
+# paper 의 사전학습 trick: PhysFormer 10 epoch → PE block weight 추출.
+# scripts/pretrain_physformer_pe.py 로 생성. 해당 파일이 있으면 자동 로드.
+PRETRAINED_PE = {'PURE': 'checkpoints/pretrained_pe_PURE.pt',
+                 'UBFC-rPPG': 'checkpoints/pretrained_pe_UBFC-rPPG.pt'}
 
 EXPERIMENTS = [
     ('PURE', PURE_PATH, 'UBFC-rPPG', UBFC_PATH),
@@ -140,9 +144,16 @@ def run_experiment(train_name, train_path, test_name, test_path):
                                  dynamic_detection_freq=DETECTION_FREQ)
     log(f"  train clips: {len(train_loader.dataset)}  test clips: {len(test_loader.dataset)}")
 
+    pe_path = PRETRAINED_PE.get(train_name)
+    if pe_path is None or not os.path.exists(pe_path):
+        log(f"  [!] pretrained PE 없음 ({pe_path}) — from scratch 학습")
+        pe_path = None
+    else:
+        log(f"  pretrained PE block: {pe_path}")
     model = SpikingPhysformer(dim=96, num_blocks=4, num_heads=4, frame=160,
                               v_threshold=1.0, T_snn=4,
-                              use_biformer=True, n_win=(2, 2, 2), topk=4).to(device)
+                              use_biformer=True, n_win=(2, 2, 2), topk=4,
+                              pretrained_pe_path=pe_path).to(device)
     optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=WD)
     pearson_criterion = NegPearsonLoss()
     freq_criterion = FrequencyLoss(fps=30)

@@ -80,6 +80,7 @@ def main():
             inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
             outputs = model(inputs)
+            outputs = (outputs - outputs.mean()) / (outputs.std() + 1e-7)
             loss_p = pearson_criterion(outputs, labels)
             loss_ce, loss_ld = freq_criterion(outputs, labels)
             loss = ALPHA * loss_p + beta * (loss_ce + loss_ld)
@@ -95,6 +96,7 @@ def main():
             for inputs, labels in test_loader:
                 inputs, labels = inputs.to(device), labels.to(device)
                 outputs = model(inputs)
+                outputs = (outputs - outputs.mean()) / (outputs.std() + 1e-7)
                 functional.reset_net(model)
                 all_p.append(outputs.cpu()); all_g.append(labels.cpu())
         preds = torch.cat(all_p).numpy(); gts = torch.cat(all_g).numpy()

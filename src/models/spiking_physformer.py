@@ -65,40 +65,49 @@ class _MS(nn.Module):
 # Spike-Driven Self Attention (S3A) — Spiking Physformer / Spike-Driven Tx V2
 # -----------------------------------------------------------------------------
 class SDA(nn.Module):
-    def __init__(self, dim, num_heads=4, theta=0.6, v_threshold=1.0):
+    """Spiking-PhysFormer S3A (paper Eq. 5-8):
+        Q = SN(BN(TDC(S))),  K = SN(BN(Conv3D(S))),  V = SN(BN(S))
+        S3A'(Q,K,V) = SN(SUM_c(Q ⊗ K)) ⊗ V
+        S3A(Q,K,V)  = BN(Conv(SN(S3A'(Q,K,V))))    ← 출력은 membrane (마지막 LIF 없음)
+    """
+    def __init__(self, dim, num_heads=4, theta=0.7, v_threshold=1.0):
         super().__init__()
         assert dim % num_heads == 0
         self.dim = dim
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
 
-        # Q: TDC + BN + LIF
+        # Q: TDC + BN + SN
         self.q_conv = _MS(CDC_T(dim, dim, kernel_size=3, padding=1, bias=False, theta=theta))
         self.q_bn = _MS(nn.BatchNorm3d(dim, track_running_stats=False))
         self.q_lif = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0,
                                     surrogate_function=surrogate.ATan(), detach_reset=True)
 
-        # K: vanilla Conv3D + BN + LIF
+        # K: vanilla Conv3D + BN + SN
         self.k_conv = _MS(nn.Conv3d(dim, dim, kernel_size=1, bias=False))
         self.k_bn = _MS(nn.BatchNorm3d(dim, track_running_stats=False))
         self.k_lif = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0,
                                     surrogate_function=surrogate.ATan(), detach_reset=True)
 
-        # V: NO conv, just BN + LIF
+        # V: BN + SN (no conv)
         self.v_bn = _MS(nn.BatchNorm3d(dim, track_running_stats=False))
         self.v_lif = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0,
                                     surrogate_function=surrogate.ATan(), detach_reset=True)
 
-        # Output projection + BN + LIF
-        self.proj_conv = _MS(nn.Conv3d(dim, dim, kernel_size=1, bias=False))
-        self.proj_bn = _MS(nn.BatchNorm3d(dim, track_running_stats=False))
+        # Inner-attention SN: SN(SUM_c(Q⊗K))   (Eq. 6 의 g(Q,K))
+        self.attn_lif = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0,
+                                       surrogate_function=surrogate.ATan(), detach_reset=True)
+
+        # Output projection: SN(·) → Conv → BN  (Eq. 8). 출력은 BN, 즉 membrane.
         self.proj_lif = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0,
                                        surrogate_function=surrogate.ATan(), detach_reset=True)
+        self.proj_conv = _MS(nn.Conv3d(dim, dim, kernel_size=1, bias=False))
+        self.proj_bn = _MS(nn.BatchNorm3d(dim, track_running_stats=False))
 
         functional.set_step_mode(self, step_mode='m')
 
     def forward(self, x):
-        """x: [T, B, C, Lt, Lh, Lw]   (membrane potential / pre-LIF)"""
+        """x: [T, B, C, Lt, Lh, Lw]   (spike input from previous block's LIF)"""
         T, B, C, Lt, Lh, Lw = x.shape
 
         q = self.q_lif(self.q_bn(self.q_conv(x)))
@@ -113,14 +122,15 @@ class SDA(nn.Module):
         k = k.reshape(T, B, H, d, N)
         v = v.reshape(T, B, H, d, N)
 
-        # Spike-driven simplified attention:
-        #   z = (Q ⊙ K).sum(channel-dim of head) ⊙ V
-        # 각 head 의 head_dim 축으로 합산 → [T, B, H, 1, N], V 와 broadcast
-        attn = (q * k).sum(dim=3, keepdim=True)        # [T, B, H, 1, N]
-        out = attn * v                                 # [T, B, H, head_dim, N]
+        # S3A' = SN(SUM_c(Q⊗K)) ⊗ V
+        attn = (q * k).sum(dim=3, keepdim=True)   # [T, B, H, 1, N]
+        attn = self.attn_lif(attn)                 # SN(SUM_c(Q⊗K))
+        out = attn * v                             # [T, B, H, head_dim, N] (broadcast)
         out = out.reshape(T, B, C, Lt, Lh, Lw)
 
-        out = self.proj_lif(self.proj_bn(self.proj_conv(out)))
+        # S3A = BN(Conv(SN(out)))  — 마지막은 membrane (LIF 없음)
+        out = self.proj_lif(out)
+        out = self.proj_bn(self.proj_conv(out))
         return out
 
 
@@ -131,7 +141,7 @@ class SDA(nn.Module):
 #   - SDA 본체는 window 내부 + top-k 라우팅된 K,V 만 참여
 # -----------------------------------------------------------------------------
 class BiSDA(nn.Module):
-    def __init__(self, dim, num_heads=4, theta=0.6, v_threshold=1.0,
+    def __init__(self, dim, num_heads=4, theta=0.7, v_threshold=1.0,
                  n_win=(2, 2, 2), topk=4):
         super().__init__()
         assert dim % num_heads == 0
@@ -141,7 +151,6 @@ class BiSDA(nn.Module):
         self.n_win = n_win
         self.topk = topk
 
-        # Q, K, V 경로 — Spiking-PhysFormer 와 동일
         self.q_conv = _MS(CDC_T(dim, dim, kernel_size=3, padding=1, bias=False, theta=theta))
         self.q_bn = _MS(nn.BatchNorm3d(dim, track_running_stats=False))
         self.q_lif = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0,
@@ -153,10 +162,14 @@ class BiSDA(nn.Module):
         self.v_bn = _MS(nn.BatchNorm3d(dim, track_running_stats=False))
         self.v_lif = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0,
                                     surrogate_function=surrogate.ATan(), detach_reset=True)
-        self.proj_conv = _MS(nn.Conv3d(dim, dim, kernel_size=1, bias=False))
-        self.proj_bn = _MS(nn.BatchNorm3d(dim, track_running_stats=False))
+        # Inner-attention SN
+        self.attn_lif = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0,
+                                       surrogate_function=surrogate.ATan(), detach_reset=True)
+        # Output: SN → Conv → BN  (membrane out)
         self.proj_lif = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0,
                                        surrogate_function=surrogate.ATan(), detach_reset=True)
+        self.proj_conv = _MS(nn.Conv3d(dim, dim, kernel_size=1, bias=False))
+        self.proj_bn = _MS(nn.BatchNorm3d(dim, track_running_stats=False))
         self.attn_scale = self.head_dim ** -0.5
         functional.set_step_mode(self, step_mode='m')
 
@@ -222,15 +235,12 @@ class BiSDA(nn.Module):
         k_h = k_g.view(T, B, num_wins, topk * win_size, H, d)
         v_h = v_g.view(T, B, num_wins, topk * win_size, H, d)
 
-        # SDA: (Q ⊙ K).sum(channel) ⊙ V  (Q,K 같은 위치 기반이 아니므로
-        # token-paired Hadamard 가 아니라 query token 별로 K_g 와 곱한 뒤 head_dim 합)
-        # 정통 방식: q[N_q,d] @ k[d,N_k] → score[N_q,N_k] @ v[N_k,d] = out[N_q,d]
-        # spike-driven 단순화: out = sum_{N_k}(Q_q ⊙ K_k) ⊙ V_k
-        # 아래 구현은 위 수식의 mean 대신 sum 인 형태로, 그대로 spike-driven
-        # multiply-accumulate 만 사용.
-        # q_h: [T,B,W,N_q,H,d], k_h/v_h: [T,B,W,N_k,H,d]
-        # score[T,B,W,H,N_q,N_k] = einsum
+        # SDA over routed set:
+        #   score = SUM_d (Q ⊗ K) (channel-합), then SN(score), then ⊗ V
+        # einsum 으로 channel-축 합산: 'tbwqhd,tbwkhd->tbwhqk'
         score = torch.einsum('tbwqhd,tbwkhd->tbwhqk', q_h, k_h)   # [T,B,W,H,N_q,N_k]
+        # SN(score) — Spiking-PhysFormer Eq.6 의 g(Q,K)
+        score = self.attn_lif(score)
         out = torch.einsum('tbwhqk,tbwkhd->tbwqhd', score, v_h)   # [T,B,W,N_q,H,d]
         out = out.reshape(T, B, num_wins, win_size, C)
 
@@ -242,13 +252,16 @@ class BiSDA(nn.Module):
         if pad_t or pad_h or pad_w:
             out = out[:, :, :, :Lt - pad_t, :Lh - pad_h, :Lw - pad_w]
 
-        # 7. proj
-        out = self.proj_lif(self.proj_bn(self.proj_conv(out)))
+        # 7. SN(out) → Conv → BN  (membrane out, 마지막 LIF 없음)
+        out = self.proj_lif(out)
+        out = self.proj_bn(self.proj_conv(out))
         return out
 
 
 # -----------------------------------------------------------------------------
-# MLP block (Conv1x1 + BN + LIF + Conv1x1 + BN + LIF)
+# MLP block — Spike-Driven V2 / Spiking-PhysFormer parallel block 의 MLP 분기.
+#   입력: spike (이전 block 의 lif_in 출력)
+#   출력: membrane (BN 출력) — paper Eq.9 의 잔차 합산을 위해 LIF 없이 BN 으로 끝.
 # -----------------------------------------------------------------------------
 class MLPBlock(nn.Module):
     def __init__(self, dim, hidden_dim=None, v_threshold=1.0):
@@ -260,13 +273,12 @@ class MLPBlock(nn.Module):
                                    surrogate_function=surrogate.ATan(), detach_reset=True)
         self.fc2 = _MS(nn.Conv3d(hidden_dim, dim, kernel_size=1, bias=False))
         self.bn2 = _MS(nn.BatchNorm3d(dim, track_running_stats=False))
-        self.lif2 = neuron.LIFNode(v_threshold=v_threshold, v_reset=0.0,
-                                   surrogate_function=surrogate.ATan(), detach_reset=True)
         functional.set_step_mode(self, step_mode='m')
 
     def forward(self, x):
+        # Conv → BN → SN → Conv → BN  (출력 membrane)
         x = self.lif1(self.bn1(self.fc1(x)))
-        x = self.lif2(self.bn2(self.fc2(x)))
+        x = self.bn2(self.fc2(x))
         return x
 
 
@@ -276,7 +288,7 @@ class MLPBlock(nn.Module):
 class ParallelSDTBlock(nn.Module):
     """y = x + S3A(BN(LIF(x))) + MLP(BN(LIF(x)))   (parallel, MS shortcut)"""
 
-    def __init__(self, dim, num_heads=4, theta=0.6, v_threshold=1.0):
+    def __init__(self, dim, num_heads=4, theta=0.7, v_threshold=1.0):
         super().__init__()
         # 입력을 spike 로 변환
         self.bn_in = _MS(nn.BatchNorm3d(dim, track_running_stats=False))
@@ -300,7 +312,7 @@ class ParallelSDTBlock(nn.Module):
 # -----------------------------------------------------------------------------
 class ParallelBiSDTBlock(nn.Module):
     """Spiking-PhysFormer 의 SDA 자리에 BiSDA (BiLevel Routing 적용) 사용."""
-    def __init__(self, dim, num_heads=4, theta=0.6, v_threshold=1.0,
+    def __init__(self, dim, num_heads=4, theta=0.7, v_threshold=1.0,
                  n_win=(2, 2, 2), topk=4):
         super().__init__()
         self.bn_in = _MS(nn.BatchNorm3d(dim, track_running_stats=False))
@@ -322,29 +334,34 @@ class ParallelBiSDTBlock(nn.Module):
 # -----------------------------------------------------------------------------
 class SpikingPhysformer(nn.Module):
     def __init__(self, dim=96, num_blocks=4, num_heads=4, frame=160, image_size=128,
-                 v_threshold=1.0, T_snn=4, theta=0.6,
-                 use_biformer=False, n_win=(2, 2, 2), topk=4):
+                 v_threshold=1.0, T_snn=4, theta=0.7,
+                 use_biformer=False, n_win=(2, 2, 2), topk=4,
+                 pretrained_pe_path=None):
         super().__init__()
         self.dim = dim
         self.frame = frame
         self.T_snn = T_snn
 
         # ---- ANN Patch Embedding (PhysFormer 의 Stem0+Stem1+Stem2 + patch_embedding) ----
+        # ANN BN 은 PhysFormer default 그대로 (track_running_stats=True).
+        # 이전엔 SNN 호환 위해 False 로 두었으나, ANN 영역까지 적용하면 eval 시
+        # batch_size=2 mini-batch 통계 사용으로 cross-dataset 평가가 불안정해짐 →
+        # PhysFormer 와 동일하게 running stats 사용.
         self.Stem0 = nn.Sequential(
             nn.Conv3d(3, dim // 4, kernel_size=[1, 5, 5], stride=1, padding=[0, 2, 2]),
-            nn.BatchNorm3d(dim // 4, track_running_stats=False),
+            nn.BatchNorm3d(dim // 4),
             nn.ReLU(inplace=True),
             nn.MaxPool3d((1, 2, 2), stride=(1, 2, 2)),  # 128 -> 64
         )
         self.Stem1 = nn.Sequential(
             nn.Conv3d(dim // 4, dim // 2, kernel_size=[3, 3, 3], stride=1, padding=1),
-            nn.BatchNorm3d(dim // 2, track_running_stats=False),
+            nn.BatchNorm3d(dim // 2),
             nn.ReLU(inplace=True),
             nn.MaxPool3d((1, 2, 2), stride=(1, 2, 2)),  # 64 -> 32
         )
         self.Stem2 = nn.Sequential(
             nn.Conv3d(dim // 2, dim, kernel_size=[3, 3, 3], stride=1, padding=1),
-            nn.BatchNorm3d(dim, track_running_stats=False),
+            nn.BatchNorm3d(dim),
             nn.ReLU(inplace=True),
             nn.MaxPool3d((1, 2, 2), stride=(1, 2, 2)),  # 32 -> 16
         )
@@ -364,17 +381,17 @@ class SpikingPhysformer(nn.Module):
                 for _ in range(num_blocks)
             ])
 
-        # ---- ANN Predictor Head (PhysFormer 와 동일) ----
+        # ---- ANN Predictor Head (PhysFormer 와 동일, BN running stats 사용) ----
         self.upsample = nn.Sequential(
             nn.Upsample(scale_factor=(2, 1, 1)),
             nn.Conv3d(dim, dim, [3, 1, 1], stride=1, padding=(1, 0, 0)),
-            nn.BatchNorm3d(dim, track_running_stats=False),
+            nn.BatchNorm3d(dim),
             nn.ELU(),
         )
         self.upsample2 = nn.Sequential(
             nn.Upsample(scale_factor=(2, 1, 1)),
             nn.Conv3d(dim, dim // 2, [3, 1, 1], stride=1, padding=(1, 0, 0)),
-            nn.BatchNorm3d(dim // 2, track_running_stats=False),
+            nn.BatchNorm3d(dim // 2),
             nn.ELU(),
         )
         self.ConvBlockLast = nn.Conv1d(dim // 2, 1, 1, stride=1, padding=0)
@@ -382,6 +399,30 @@ class SpikingPhysformer(nn.Module):
         # 모든 spikingjelly 모듈을 multi-step 으로 설정
         functional.set_step_mode(self, step_mode='m')
         self._init_weights()
+
+        # 사전학습된 PE block weight 로딩 (paper 의 PhysFormer pretraining 적용)
+        if pretrained_pe_path is not None:
+            self.load_pretrained_pe(pretrained_pe_path)
+
+    def load_pretrained_pe(self, path):
+        """PhysFormer pretrain 으로 학습된 Stem0/1/2 + patch_embedding weight 로드.
+
+        SpikingPhysformer 의 PE block 구조와 PhysFormer baseline 의 PE block 구조가
+        완전히 동일해야 한다 (BN track_running_stats=True 포함).
+        """
+        sd = torch.load(path, map_location='cpu')
+        own_sd = self.state_dict()
+        loaded, missing = 0, []
+        for k, v in sd.items():
+            if k in own_sd and own_sd[k].shape == v.shape:
+                own_sd[k] = v
+                loaded += 1
+            else:
+                missing.append(k)
+        self.load_state_dict(own_sd)
+        print(f"[SpikingPhysformer] Loaded pretrained PE block: {loaded} tensors from {path}")
+        if missing:
+            print(f"  missing/shape-mismatch: {missing[:5]}{'...' if len(missing) > 5 else ''}")
 
     def _init_weights(self):
         for m in self.modules():
