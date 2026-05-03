@@ -67,11 +67,14 @@ def main(dataset_name):
     log(f"[*] PhysFormer pretrain on {dataset_name} ({device})")
     log(f"  EPOCHS={EPOCHS}  BATCH={BATCH_SIZE}  LR={LR}  WD={WD}")
 
+    # paper / rPPG-Toolbox 표준: source train 80%, valid 20%. PE pretraining 도
+    # 80% train 사용 (target test 정보 leakage 방지).
     loader = get_dataloader(dataset_name, DATASET_PATHS[dataset_name], BATCH_SIZE,
                             clip_len=160, face_crop=True, shuffle=True,
                             data_type='diff_normalized',
-                            dynamic_detection_freq=DETECTION_FREQ)
-    log(f"  train clips: {len(loader.dataset)}")
+                            dynamic_detection_freq=DETECTION_FREQ,
+                            split_range=(0.0, 0.8))
+    log(f"  train clips (80%): {len(loader.dataset)}")
 
     model = PhysFormer(dim=96, ff_dim=144, num_heads=4, num_layers=12,
                        frame=160, image_size=128, dropout=0.1, theta=0.7).to(device)

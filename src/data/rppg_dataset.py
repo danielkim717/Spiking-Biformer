@@ -29,8 +29,12 @@ class RPPGDataset(Dataset):
                  face_crop=False, subjects_filter=None,
                  face_detection_backend='HC', larger_box_coef=1.5,
                  dynamic_detection_freq=0, data_type='standardized',
+                 split_range=None,
                  # legacy aliases for backwards compatibility
                  dynamic_detection=None, standardize_input=None):
+        """split_range: (begin, end) ∈ [0, 1] tuple. subject 정렬 후 해당 비율 구간만 사용.
+        rPPG-Toolbox `BEGIN`/`END` 와 동일 — 0.0-0.8 train, 0.8-1.0 valid 표준.
+        """
         self.dataset_name = dataset_name
         self.root_dir = root_dir
         self.clip_len = clip_len
@@ -38,6 +42,7 @@ class RPPGDataset(Dataset):
         self.face_crop = face_crop
         self.face_detection_backend = face_detection_backend
         self.larger_box_coef = larger_box_coef
+        self.split_range = split_range
         # Backwards compat: standardize_input=True/False maps to data_type
         if standardize_input is False:
             data_type = 'raw'
@@ -126,9 +131,16 @@ class RPPGDataset(Dataset):
         need_count = self.clip_len + (1 if self.data_type == 'diff_normalized' else 0)
 
         if self.dataset_name == 'PURE':
-            subjects = [d for d in os.listdir(self.root_dir) if os.path.isdir(os.path.join(self.root_dir, d))]
+            subjects = sorted([d for d in os.listdir(self.root_dir) if os.path.isdir(os.path.join(self.root_dir, d))])
             if self.subjects_filter is not None:
                 subjects = [s for s in subjects if s in self.subjects_filter]
+            if self.split_range is not None:
+                n = len(subjects)
+                s_idx = int(self.split_range[0] * n)
+                e_idx = int(self.split_range[1] * n)
+                subjects = subjects[s_idx:e_idx]
+                print(f"[Dataset] split_range={self.split_range} → {len(subjects)} subjects "
+                      f"({subjects[0] if subjects else '-'} ... {subjects[-1] if subjects else '-'})")
             for subj in subjects:
                 json_path = os.path.join(self.root_dir, subj, f"{subj}.json")
                 img_dir = os.path.join(self.root_dir, subj, subj)
@@ -158,9 +170,17 @@ class RPPGDataset(Dataset):
             if not os.path.exists(base_dir):
                 base_dir = self.root_dir
 
-            subjects = [d for d in os.listdir(base_dir) if d.startswith('subject')]
+            subjects = sorted([d for d in os.listdir(base_dir) if d.startswith('subject')],
+                              key=lambda s: int(s.replace('subject', '')))
             if self.subjects_filter is not None:
                 subjects = [s for s in subjects if s in self.subjects_filter]
+            if self.split_range is not None:
+                n = len(subjects)
+                s_idx = int(self.split_range[0] * n)
+                e_idx = int(self.split_range[1] * n)
+                subjects = subjects[s_idx:e_idx]
+                print(f"[Dataset] split_range={self.split_range} → {len(subjects)} subjects "
+                      f"({subjects[0] if subjects else '-'} ... {subjects[-1] if subjects else '-'})")
             for subj in subjects:
                 subj_dir = os.path.join(base_dir, subj)
                 vid_path = os.path.join(subj_dir, 'vid.avi')
@@ -320,6 +340,7 @@ def get_dataloader(dataset_name, root_dir, batch_size=2, clip_len=30, img_size=1
                    face_crop=False, subjects_filter=None, shuffle=True,
                    face_detection_backend='HC', larger_box_coef=1.5,
                    dynamic_detection_freq=0, data_type='standardized',
+                   split_range=None,
                    dynamic_detection=None, standardize_input=None,
                    drop_last=None):
     dataset = RPPGDataset(dataset_name, root_dir, clip_len=clip_len, img_size=img_size,
@@ -328,6 +349,7 @@ def get_dataloader(dataset_name, root_dir, batch_size=2, clip_len=30, img_size=1
                           larger_box_coef=larger_box_coef,
                           dynamic_detection_freq=dynamic_detection_freq,
                           data_type=data_type,
+                          split_range=split_range,
                           dynamic_detection=dynamic_detection,
                           standardize_input=standardize_input)
     # 마지막 incomplete batch 가 SNN 내부 BN 통계 (track_running_stats=False) 를

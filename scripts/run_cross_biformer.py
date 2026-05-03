@@ -192,15 +192,26 @@ def run_experiment(train_name, train_path, test_name, test_path):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+    # rPPG-Toolbox 표준: source 80% train, 20% valid (subject 단위 split).
+    # Best epoch 은 valid per-clip Pearson 으로 선정 → target test leakage 회피
+    # (paper 4.2: "model that performs the best on the validation set").
     train_loader = get_dataloader(train_name, train_path, BATCH_SIZE, clip_len=160,
                                   face_crop=True, shuffle=True,
                                   data_type='diff_normalized',
-                                  dynamic_detection_freq=DETECTION_FREQ)
+                                  dynamic_detection_freq=DETECTION_FREQ,
+                                  split_range=(0.0, 0.8))
+    valid_loader = get_dataloader(train_name, train_path, BATCH_SIZE, clip_len=160,
+                                  face_crop=True, shuffle=False,
+                                  data_type='diff_normalized',
+                                  dynamic_detection_freq=DETECTION_FREQ,
+                                  split_range=(0.8, 1.0))
     test_loader = get_dataloader(test_name, test_path, BATCH_SIZE, clip_len=160,
                                  face_crop=True, shuffle=False,
                                  data_type='diff_normalized',
                                  dynamic_detection_freq=DETECTION_FREQ)
-    log(f"  train clips: {len(train_loader.dataset)}  test clips: {len(test_loader.dataset)}")
+    log(f"  train clips: {len(train_loader.dataset)} (80% of {train_name})")
+    log(f"  valid clips: {len(valid_loader.dataset)} (20% of {train_name}) — used for best-epoch selection")
+    log(f"  test  clips: {len(test_loader.dataset)} ({test_name})")
 
     pe_path = PRETRAINED_PE.get(train_name)
     if pe_path is None or not os.path.exists(pe_path):
@@ -226,10 +237,13 @@ def run_experiment(train_name, train_path, test_name, test_path):
     log(f"  grad_clip: max_norm={GRAD_CLIP}")
     log(f"  HR metric: Butterworth({HR_LOW}-{HR_HIGH}Hz) + FFT peak → BPM")
 
-    # best 기준은 per-clip Pearson (pooled 는 baseline drift 가 dominate)
-    best = {'Pearson_per_clip': -1.0, 'Pearson_pooled': 0.0,
-            'MAE_bpm': 0.0, 'RMSE_bpm': 0.0, 'MAPE_pct': 0.0,
-            'MAE_sample': 0.0, 'RMSE_sample': 0.0}
+    # best 기준: source valid per-clip Pearson. target test 정보는 best 선정에 사용 X.
+    # 최종 보고는 best valid epoch 의 target test metric.
+    best_valid_per_clip = -1.0
+    best_test = {'Pearson_per_clip': 0.0, 'Pearson_pooled': 0.0,
+                 'MAE_bpm': 0.0, 'RMSE_bpm': 0.0, 'MAPE_pct': 0.0,
+                 'MAE_sample': 0.0, 'RMSE_sample': 0.0}
+    best_valid = {'Pearson_per_clip': 0.0, 'MAE_bpm': 0.0}
     best_epoch = 0
     history = []
 
@@ -268,51 +282,62 @@ def run_experiment(train_name, train_path, test_name, test_path):
         if firing:
             log(f"  block firing rates: {[f'{f:.3f}' for f in firing]}  current_lr: {scheduler.get_last_lr()[0]:.2e}")
 
-        # Eval
-        model.eval()
-        all_p, all_g = [], []
-        with torch.no_grad():
-            for j, (inputs, labels) in enumerate(test_loader):
-                inputs, labels = inputs.to(device), labels.to(device)
-                outputs = model(inputs)
-                functional.reset_net(model)
-                all_p.append(outputs.cpu()); all_g.append(labels.cpu())
-                if j % 10 == 0:
-                    _save_status({
-                        'experiment': label, 'epoch': epoch + 1, 'total_epochs': EPOCHS,
-                        'step': j, 'total_steps': len(test_loader),
-                        'loss': 0.0, 'phase': 'Evaluation',
-                    })
-        preds = torch.cat(all_p).numpy(); gts = torch.cat(all_g).numpy()
-        mae_s = float(np.mean(np.abs(preds - gts)))
-        rmse_s = float(np.sqrt(np.mean((preds - gts) ** 2)))
-        pooled = float(np.corrcoef(preds.flatten(), gts.flatten())[0, 1])
-        per_clip = per_clip_pearson(preds, gts)
-        # paper 4.2 후처리: Butterworth + FFT peak → HR (BPM)
-        mae_hr, rmse_hr, mape, _, _ = hr_metrics(preds, gts, fps=FPS)
-        history.append({
-            'epoch': epoch + 1, 'avg_loss': avg_loss,
-            'MAE_bpm': mae_hr, 'RMSE_bpm': rmse_hr, 'MAPE_pct': mape,
-            'MAE_sample': mae_s, 'RMSE_sample': rmse_s,
-            'Pearson_pooled': pooled, 'Pearson_per_clip': per_clip,
-        })
-        log(f"\nEpoch {epoch+1}/{EPOCHS}: Train avg loss {avg_loss:.4f}")
-        log(f"  HR (BPM)   MAE {mae_hr:.3f}  RMSE {rmse_hr:.3f}  MAPE {mape:.2f}%")
-        log(f"  Pearson    pooled {pooled:.4f}  per-clip {per_clip:.4f}")
-        log(f"  Sample-wise (DiffBVP) MAE {mae_s:.4f}  RMSE {rmse_s:.4f}")
-        # best 는 per-clip Pearson 기준
-        if per_clip > best['Pearson_per_clip']:
-            best = {
-                'Pearson_per_clip': per_clip, 'Pearson_pooled': pooled,
+        # Eval — source valid (best-epoch 선정용) + target test (보고용)
+        def evaluate(loader, phase_name):
+            model.eval()
+            all_p, all_g = [], []
+            with torch.no_grad():
+                for j, (inputs, labels) in enumerate(loader):
+                    inputs, labels = inputs.to(device), labels.to(device)
+                    outputs = model(inputs)
+                    functional.reset_net(model)
+                    all_p.append(outputs.cpu()); all_g.append(labels.cpu())
+                    if j % 10 == 0:
+                        _save_status({
+                            'experiment': label, 'epoch': epoch + 1, 'total_epochs': EPOCHS,
+                            'step': j, 'total_steps': len(loader),
+                            'loss': 0.0, 'phase': phase_name,
+                        })
+            preds = torch.cat(all_p).numpy(); gts = torch.cat(all_g).numpy()
+            mae_s = float(np.mean(np.abs(preds - gts)))
+            rmse_s = float(np.sqrt(np.mean((preds - gts) ** 2)))
+            pooled = float(np.corrcoef(preds.flatten(), gts.flatten())[0, 1])
+            per_clip = per_clip_pearson(preds, gts)
+            mae_hr, rmse_hr, mape, _, _ = hr_metrics(preds, gts, fps=FPS)
+            return {
+                'Pearson_pooled': pooled, 'Pearson_per_clip': per_clip,
                 'MAE_bpm': mae_hr, 'RMSE_bpm': rmse_hr, 'MAPE_pct': mape,
                 'MAE_sample': mae_s, 'RMSE_sample': rmse_s,
             }
+
+        valid_metrics = evaluate(valid_loader, 'Validation')
+        test_metrics = evaluate(test_loader, 'Test')
+
+        history.append({
+            'epoch': epoch + 1, 'avg_loss': avg_loss,
+            'valid': valid_metrics, 'test': test_metrics,
+        })
+        log(f"\nEpoch {epoch+1}/{EPOCHS}: Train avg loss {avg_loss:.4f}")
+        log(f"  VALID (source 20%)   per-clip Pearson {valid_metrics['Pearson_per_clip']:.4f}  "
+            f"pooled {valid_metrics['Pearson_pooled']:.4f}  "
+            f"HR MAE {valid_metrics['MAE_bpm']:.3f} BPM")
+        log(f"  TEST  (target full)  per-clip Pearson {test_metrics['Pearson_per_clip']:.4f}  "
+            f"pooled {test_metrics['Pearson_pooled']:.4f}  "
+            f"HR MAE {test_metrics['MAE_bpm']:.3f} BPM  "
+            f"RMSE {test_metrics['RMSE_bpm']:.3f} BPM  MAPE {test_metrics['MAPE_pct']:.2f}%")
+        # Best epoch 은 valid per-clip Pearson 으로만 선정
+        if valid_metrics['Pearson_per_clip'] > best_valid_per_clip:
+            best_valid_per_clip = valid_metrics['Pearson_per_clip']
+            best_valid = valid_metrics
+            best_test = test_metrics
             best_epoch = epoch + 1
 
-    log(f"\n→ Best for {label}: epoch {best_epoch}")
-    log(f"   per-clip Pearson {best['Pearson_per_clip']:.4f}  pooled Pearson {best['Pearson_pooled']:.4f}")
-    log(f"   HR  MAE {best['MAE_bpm']:.3f} BPM  RMSE {best['RMSE_bpm']:.3f} BPM  MAPE {best['MAPE_pct']:.2f}%")
-    return best, best_epoch, history
+    log(f"\n→ Best for {label}: epoch {best_epoch} (selected by valid per-clip Pearson {best_valid['Pearson_per_clip']:.4f})")
+    log(f"   TEST per-clip Pearson {best_test['Pearson_per_clip']:.4f}  "
+        f"pooled {best_test['Pearson_pooled']:.4f}")
+    log(f"   TEST HR  MAE {best_test['MAE_bpm']:.3f} BPM  RMSE {best_test['RMSE_bpm']:.3f} BPM  "
+        f"MAPE {best_test['MAPE_pct']:.2f}%")
+    return best_test, best_epoch, history
 
 
 def main():
