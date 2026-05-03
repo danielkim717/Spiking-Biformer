@@ -12,6 +12,10 @@ Cross-dataset 학습-평가 (Spiking-PhysFormer + BiLevel Routing, **논문 셋�
   - 손실: L = α·NegPearson + β·(L_CE + L_LD)
         α = 0.1 (고정),  β = β₀ · η^((e-1)/E),  β₀=1.0, η=5.0, E=10
   - 옵티마이저: Adam, lr=3e-3, wd=5e-5
+  - LR scheduler: OneCycleLR (rPPG-Toolbox 기본값)
+  - Gradient clipping: max_norm=1.0
+  - Best 기준: per-clip Pearson
+  - HR metric: 2nd-order Butterworth (0.75-2.5 Hz) + FFT peak → BPM (paper 4.2)
 
 출력:
   - 매 epoch 평가 결과를 results/cross_biformer/log.txt 누적
@@ -21,6 +25,7 @@ import os
 import sys
 import json
 import time
+import random
 import threading
 from datetime import datetime, timedelta
 
@@ -29,6 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import torch
 import torch.optim as optim
+from scipy.signal import butter, filtfilt
 from spikingjelly.activation_based import functional
 
 from src.models.spiking_physformer import SpikingPhysformer
@@ -44,6 +50,11 @@ ALPHA = 0.1            # NegPearson 가중치 (고정)
 BETA0 = 1.0            # β 시작값
 ETA = 5.0              # β 지수 베이스 → epoch 끝에 β = β₀·η^((E-1)/E) ≈ 4.26
 DETECTION_FREQ = 30    # rPPG-Toolbox DYNAMIC_DETECTION_FREQUENCY
+GRAD_CLIP = 1.0        # gradient clip max_norm
+SEED = 42              # paper: "fixed random seed for training and testing"
+HR_LOW = 0.75          # Butterworth low cutoff (Hz) → 45 BPM
+HR_HIGH = 2.5          # Butterworth high cutoff (Hz) → 150 BPM
+FPS = 30
 PURE_PATH = 'D:\\PURE'
 UBFC_PATH = 'D:\\UBFC-rPPG'
 # paper 의 사전학습 trick: PhysFormer 10 epoch → PE block weight 추출.
@@ -79,6 +90,52 @@ def per_clip_pearson(pred, gt):
     return float(np.mean(out)) if out else 0.0
 
 
+def _butter_bandpass_filter(signal, low_hz, high_hz, fps, order=2):
+    """2nd-order Butterworth bandpass (paper 4.2). signal: 1D np.array."""
+    ny = fps / 2.0
+    b, a = butter(order, [low_hz / ny, high_hz / ny], btype='bandpass')
+    return filtfilt(b, a, signal)
+
+
+def predict_hr(signal, fps=FPS, low_hz=HR_LOW, high_hz=HR_HIGH):
+    """rPPG signal → 2nd-order Butterworth → FFT peak → HR (BPM).
+    paper 4.2 의 후처리 절차 그대로."""
+    s = np.asarray(signal, dtype=np.float64)
+    if np.std(s) < 1e-9:
+        return 0.0
+    filtered = _butter_bandpass_filter(s, low_hz, high_hz, fps, order=2)
+    N = len(filtered)
+    win = np.hanning(N)
+    fft = np.abs(np.fft.rfft(filtered * win))
+    freqs = np.fft.rfftfreq(N, d=1.0 / fps)
+    valid = (freqs >= low_hz) & (freqs <= high_hz)
+    if not valid.any():
+        return 0.0
+    valid_freqs = freqs[valid]
+    valid_fft = fft[valid]
+    peak_freq = valid_freqs[np.argmax(valid_fft)]
+    return float(peak_freq * 60.0)
+
+
+def hr_metrics(preds, gts, fps=FPS):
+    """preds, gts: (N, T) arrays. Returns (MAE_bpm, RMSE_bpm, MAPE_pct)."""
+    pred_hrs = np.array([predict_hr(p, fps) for p in preds])
+    gt_hrs = np.array([predict_hr(g, fps) for g in gts])
+    abs_err = np.abs(pred_hrs - gt_hrs)
+    mae = float(np.mean(abs_err))
+    rmse = float(np.sqrt(np.mean(abs_err ** 2)))
+    nz = gt_hrs != 0
+    mape = float(np.mean(abs_err[nz] / gt_hrs[nz]) * 100.0) if nz.any() else 0.0
+    return mae, rmse, mape, pred_hrs, gt_hrs
+
+
+def _seed_everything(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+
 def _save_status(d):
     os.makedirs('results', exist_ok=True)
     with open(STATUS_FILE, 'w', encoding='utf-8') as f:
@@ -102,8 +159,9 @@ def _live(now, status):
         lines.append('## ✅ 완료된 실험')
         for c in _state['completed']:
             m = c['best']
-            lines.append(f"- **{c['name']}**: best Pearson r = **{m['Pearson']:.4f}** "
-                         f"(epoch {c['best_epoch']}, MAE {m['MAE']:.4f}, RMSE {m['RMSE']:.4f})")
+            lines.append(f"- **{c['name']}**: per-clip Pearson **{m['Pearson_per_clip']:.4f}** "
+                         f"(pooled {m['Pearson_pooled']:.4f}, "
+                         f"HR MAE {m['MAE_bpm']:.2f} BPM, epoch {c['best_epoch']})")
         lines.append('')
     os.makedirs('results', exist_ok=True)
     with open(LIVE_FILE, 'w', encoding='utf-8') as f:
@@ -155,12 +213,23 @@ def run_experiment(train_name, train_path, test_name, test_path):
                               use_biformer=True, n_win=(2, 2, 2), topk=4,
                               pretrained_pe_path=pe_path).to(device)
     optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=WD)
+    # OneCycleLR — rPPG-Toolbox 기본 scheduler. paper 4.2: "we follow the standard
+    # configuration of rPPG-Toolbox" → max_lr=LR, total_steps=EPOCHS*len(train_loader)
+    total_steps = EPOCHS * len(train_loader)
+    scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr=LR,
+                                              total_steps=total_steps)
     pearson_criterion = NegPearsonLoss()
-    freq_criterion = FrequencyLoss(fps=30)
+    freq_criterion = FrequencyLoss(fps=FPS)
     log(f"  model params: {sum(p.numel() for p in model.parameters())}")
     log(f"  loss: α={ALPHA} (NegPearson) + β·(CE+LD), β = {BETA0}·{ETA}^((e-1)/{EPOCHS})")
+    log(f"  optim: Adam(lr={LR}, wd={WD}) + OneCycleLR(max_lr={LR}, steps={total_steps})")
+    log(f"  grad_clip: max_norm={GRAD_CLIP}")
+    log(f"  HR metric: Butterworth({HR_LOW}-{HR_HIGH}Hz) + FFT peak → BPM")
 
-    best = {'Pearson': -1.0, 'MAE': 0.0, 'RMSE': 0.0}
+    # best 기준은 per-clip Pearson (pooled 는 baseline drift 가 dominate)
+    best = {'Pearson_per_clip': -1.0, 'Pearson_pooled': 0.0,
+            'MAE_bpm': 0.0, 'RMSE_bpm': 0.0, 'MAPE_pct': 0.0,
+            'MAE_sample': 0.0, 'RMSE_sample': 0.0}
     best_epoch = 0
     history = []
 
@@ -182,7 +251,9 @@ def run_experiment(train_name, train_path, test_name, test_path):
             loss_ce, loss_ld = freq_criterion(outputs, labels)
             loss = ALPHA * loss_p + beta * (loss_ce + loss_ld)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
             optimizer.step()
+            scheduler.step()
             functional.reset_net(model)
             epoch_loss += float(loss.item()); nb += 1
             if i % 10 == 0:
@@ -192,6 +263,10 @@ def run_experiment(train_name, train_path, test_name, test_path):
                     'loss': float(loss.item()), 'phase': 'Training',
                 })
         avg_loss = epoch_loss / max(1, nb)
+        # firing rate trace (디버깅용)
+        firing = getattr(model, 'last_firing_rates', [])
+        if firing:
+            log(f"  block firing rates: {[f'{f:.3f}' for f in firing]}  current_lr: {scheduler.get_last_lr()[0]:.2e}")
 
         # Eval
         model.eval()
@@ -209,21 +284,34 @@ def run_experiment(train_name, train_path, test_name, test_path):
                         'loss': 0.0, 'phase': 'Evaluation',
                     })
         preds = torch.cat(all_p).numpy(); gts = torch.cat(all_g).numpy()
-        mae = float(np.mean(np.abs(preds - gts)))
-        rmse = float(np.sqrt(np.mean((preds - gts) ** 2)))
+        mae_s = float(np.mean(np.abs(preds - gts)))
+        rmse_s = float(np.sqrt(np.mean((preds - gts) ** 2)))
         pooled = float(np.corrcoef(preds.flatten(), gts.flatten())[0, 1])
         per_clip = per_clip_pearson(preds, gts)
-        history.append({'epoch': epoch + 1, 'avg_loss': avg_loss, 'MAE': mae, 'RMSE': rmse,
-                        'Pearson': pooled, 'per_clip_Pearson': per_clip})
+        # paper 4.2 후처리: Butterworth + FFT peak → HR (BPM)
+        mae_hr, rmse_hr, mape, _, _ = hr_metrics(preds, gts, fps=FPS)
+        history.append({
+            'epoch': epoch + 1, 'avg_loss': avg_loss,
+            'MAE_bpm': mae_hr, 'RMSE_bpm': rmse_hr, 'MAPE_pct': mape,
+            'MAE_sample': mae_s, 'RMSE_sample': rmse_s,
+            'Pearson_pooled': pooled, 'Pearson_per_clip': per_clip,
+        })
         log(f"\nEpoch {epoch+1}/{EPOCHS}: Train avg loss {avg_loss:.4f}")
-        log(f"  Eval MAE {mae:.4f}  RMSE {rmse:.4f}  pooled-Pearson {pooled:.4f}  "
-            f"per-clip-Pearson {per_clip:.4f}")
-        if pooled > best['Pearson']:
-            best = {'Pearson': pooled, 'MAE': mae, 'RMSE': rmse}
+        log(f"  HR (BPM)   MAE {mae_hr:.3f}  RMSE {rmse_hr:.3f}  MAPE {mape:.2f}%")
+        log(f"  Pearson    pooled {pooled:.4f}  per-clip {per_clip:.4f}")
+        log(f"  Sample-wise (DiffBVP) MAE {mae_s:.4f}  RMSE {rmse_s:.4f}")
+        # best 는 per-clip Pearson 기준
+        if per_clip > best['Pearson_per_clip']:
+            best = {
+                'Pearson_per_clip': per_clip, 'Pearson_pooled': pooled,
+                'MAE_bpm': mae_hr, 'RMSE_bpm': rmse_hr, 'MAPE_pct': mape,
+                'MAE_sample': mae_s, 'RMSE_sample': rmse_s,
+            }
             best_epoch = epoch + 1
 
-    log(f"\n→ Best for {label}: epoch {best_epoch}, Pearson r = {best['Pearson']:.4f}, "
-        f"MAE {best['MAE']:.4f}, RMSE {best['RMSE']:.4f}")
+    log(f"\n→ Best for {label}: epoch {best_epoch}")
+    log(f"   per-clip Pearson {best['Pearson_per_clip']:.4f}  pooled Pearson {best['Pearson_pooled']:.4f}")
+    log(f"   HR  MAE {best['MAE_bpm']:.3f} BPM  RMSE {best['RMSE_bpm']:.3f} BPM  MAPE {best['MAPE_pct']:.2f}%")
     return best, best_epoch, history
 
 
@@ -231,6 +319,8 @@ def main():
     os.makedirs(RESULT_DIR, exist_ok=True)
     open(LOG, 'w', encoding='utf-8').close()
     _state['started_at'] = datetime.now()
+    _seed_everything(SEED)
+    log(f"[*] Seed fixed to {SEED} (paper: 'fixed random seed for reproducibility')")
     logger = threading.Thread(target=_progress_loop, daemon=True)
     logger.start()
 
@@ -251,10 +341,13 @@ def main():
         log("[*] 종합 결과")
         log("=" * 70)
         for r in all_results:
+            b = r['best']
             log(f"  {r['name']}:")
             log(f"    Best @ epoch {r['best_epoch']}: "
-                f"Pearson r = {r['best']['Pearson']:.4f}, "
-                f"MAE = {r['best']['MAE']:.4f}, RMSE = {r['best']['RMSE']:.4f}")
+                f"per-clip Pearson = {b['Pearson_per_clip']:.4f}  "
+                f"(pooled {b['Pearson_pooled']:.4f})")
+            log(f"      HR  MAE {b['MAE_bpm']:.3f} BPM  RMSE {b['RMSE_bpm']:.3f} BPM  "
+                f"MAPE {b['MAPE_pct']:.2f}%")
 
         # JSON dump
         with open(os.path.join(RESULT_DIR, 'summary.json'), 'w', encoding='utf-8') as f:

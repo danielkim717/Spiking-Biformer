@@ -78,6 +78,8 @@ def main(dataset_name):
     log(f"  model params: {sum(p.numel() for p in model.parameters())}")
 
     optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=WD)
+    total_steps = EPOCHS * len(loader)
+    scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr=LR, total_steps=total_steps)
     pearson_criterion = NegPearsonLoss()
     freq_criterion = FrequencyLoss(fps=30)
 
@@ -96,10 +98,12 @@ def main(dataset_name):
             loss_ce, loss_ld = freq_criterion(outputs, labels)
             loss = ALPHA * loss_p + beta * (loss_ce + loss_ld)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
+            scheduler.step()
             epoch_loss += float(loss.item()); nb += 1
             if i % 20 == 0:
-                log(f"  step {i}/{len(loader)}  loss={loss.item():.3f}")
+                log(f"  step {i}/{len(loader)}  loss={loss.item():.3f}  lr={scheduler.get_last_lr()[0]:.2e}")
         avg_loss = epoch_loss / max(1, nb)
         elapsed = time.time() - t0
         log(f"  Epoch {epoch+1} avg loss {avg_loss:.4f}  ({elapsed:.0f}s)")

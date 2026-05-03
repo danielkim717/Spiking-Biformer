@@ -72,6 +72,8 @@ def main():
     freq_criterion = FrequencyLoss(fps=30)
     log(f"  params: {sum(p.numel() for p in model.parameters())}")
 
+    total_steps = EPOCHS * len(train_loader)
+    scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr=LR, total_steps=total_steps)
     for epoch in range(EPOCHS):
         beta = BETA0 * (ETA ** (epoch / EPOCHS))
         model.train()
@@ -80,12 +82,13 @@ def main():
             inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
             outputs = model(inputs)
-            outputs = (outputs - outputs.mean()) / (outputs.std() + 1e-7)
             loss_p = pearson_criterion(outputs, labels)
             loss_ce, loss_ld = freq_criterion(outputs, labels)
             loss = ALPHA * loss_p + beta * (loss_ce + loss_ld)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
+            scheduler.step()
             functional.reset_net(model)
             epoch_loss += float(loss.item()); nb += 1
         avg_loss = epoch_loss / max(1, nb)
@@ -96,7 +99,6 @@ def main():
             for inputs, labels in test_loader:
                 inputs, labels = inputs.to(device), labels.to(device)
                 outputs = model(inputs)
-                outputs = (outputs - outputs.mean()) / (outputs.std() + 1e-7)
                 functional.reset_net(model)
                 all_p.append(outputs.cpu()); all_g.append(labels.cpu())
         preds = torch.cat(all_p).numpy(); gts = torch.cat(all_g).numpy()
