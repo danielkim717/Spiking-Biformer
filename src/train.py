@@ -3,7 +3,9 @@
 에포크마다 평가를 수행하도록 개선되었습니다.
 """
 import os
+import math
 import json
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -37,33 +39,73 @@ class NegPearsonLoss(nn.Module):
         return 1.0 - torch.mean(pearson)
 
 class FrequencyLoss(nn.Module):
-    def __init__(self, fps=30):
+    """PhysFormer / Spiking-PhysFormer Frequency loss (TorchLossComputer 재현).
+
+    bpm range 40-180 (140 bins). Hanning window, 정규화된 complex_absolute (sum=1).
+    target BPM index 는 labels 에서 argmax(complex_absolute) 로 추출.
+
+    Returns (loss_ce, loss_ld):
+      - loss_ce: F.cross_entropy(complex_absolute, target_idx)  (PhysFormer recipe 그대로)
+      - loss_ld: KL(softmax(complex_absolute) || Gaussian(target_idx, std)) — DLDL_softmax2
+
+    Reference:
+      https://github.com/ZitongYu/PhysFormer/blob/main/TorchLossComputer.py
+    """
+
+    def __init__(self, fps=30, bpm_low=40, bpm_high=180, std=1.0):
         super().__init__()
         self.fps = fps
-        
+        self.bpm_low = bpm_low
+        self.bpm_high = bpm_high
+        self.num_bpm = bpm_high - bpm_low
+        self.std = std
+
+    @staticmethod
+    def _compute_complex_absolute_given_k(signal, k, N):
+        """Hanning-windowed DFT magnitude squared at frequencies k.
+        signal: (B, T)  k: (num_bpm,)  N: int  →  (B, num_bpm)"""
+        device = signal.device
+        two_pi_n_over_N = 2.0 * math.pi * torch.arange(0, N, dtype=torch.float32, device=device) / N
+        hanning = torch.from_numpy(np.hanning(N).astype(np.float32)).to(device)
+        windowed = signal * hanning.unsqueeze(0)
+        phase = k.view(-1, 1) * two_pi_n_over_N.view(1, -1)
+        sin_basis = torch.sin(phase)
+        cos_basis = torch.cos(phase)
+        sin_part = windowed @ sin_basis.t()
+        cos_part = windowed @ cos_basis.t()
+        return sin_part * sin_part + cos_part * cos_part
+
+    def _complex_absolute(self, signal):
+        B, N = signal.shape
+        unit_per_hz = self.fps / N
+        bpm_range = torch.arange(self.bpm_low, self.bpm_high, dtype=torch.float32, device=signal.device)
+        feasible_bpm = bpm_range / 60.0
+        k = feasible_bpm / unit_per_hz
+        ca = self._compute_complex_absolute_given_k(signal, k, N)
+        ca = ca / (ca.sum(dim=1, keepdim=True) + 1e-7)
+        return ca
+
+    def _gaussian_target_distribution(self, target_idx):
+        bins = torch.arange(self.num_bpm, dtype=torch.float32, device=target_idx.device).view(1, -1)
+        mean = target_idx.view(-1, 1).float()
+        gauss = torch.exp(-(bins - mean) ** 2 / (2.0 * self.std ** 2)) / (math.sqrt(2.0 * math.pi) * self.std)
+        gauss = torch.clamp(gauss, min=1e-15)
+        gauss = gauss / gauss.sum(dim=1, keepdim=True)
+        return gauss
+
     def forward(self, preds, labels):
-        pred_fft = torch.fft.rfft(preds, dim=1)
-        pred_psd = torch.abs(pred_fft) ** 2
-        
-        label_fft = torch.fft.rfft(labels, dim=1)
-        label_psd = torch.abs(label_fft) ** 2
-        
-        freqs = torch.fft.rfftfreq(preds.shape[1], d=1.0/self.fps).to(preds.device)
-        valid_idx = (freqs >= 0.66) & (freqs <= 3.0) # 40 ~ 180 BPM
-        
-        pred_psd = pred_psd[:, valid_idx]
-        label_psd = label_psd[:, valid_idx]
-        
-        if pred_psd.shape[1] == 0:
-            return torch.tensor(0.0).to(preds.device), torch.tensor(0.0).to(preds.device)
-            
-        pred_prob = F.softmax(pred_psd, dim=1)
-        label_prob = F.softmax(label_psd, dim=1)
-        
-        target_class = torch.argmax(label_prob, dim=1)
-        loss_ce = F.cross_entropy(pred_psd, target_class)
-        loss_ld = F.kl_div(F.log_softmax(pred_psd, dim=1), label_prob, reduction='batchmean')
-        
+        pred_ca = self._complex_absolute(preds)
+        with torch.no_grad():
+            label_ca = self._complex_absolute(labels)
+            target_idx = torch.argmax(label_ca, dim=1)
+
+        loss_ce = F.cross_entropy(pred_ca, target_idx)
+
+        gauss_target = self._gaussian_target_distribution(target_idx)
+        pred_softmax = F.softmax(pred_ca, dim=1)
+        log_pred_softmax = torch.log(pred_softmax + 1e-15)
+        loss_ld = F.kl_div(log_pred_softmax, gauss_target, reduction='batchmean')
+
         return loss_ce, loss_ld
 
 def run_experiment(train_ds, test_ds, epochs=30, batch_size=2, v_threshold=1.0, lr=3e-3):
@@ -86,7 +128,6 @@ def run_experiment(train_ds, test_ds, epochs=30, batch_size=2, v_threshold=1.0, 
 
     model = PhysBiformer(frame=160, patches=(4, 4, 4), v_threshold=v_threshold).to(device)
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=5e-5)
-    mse_criterion = nn.MSELoss()
     pearson_criterion = NegPearsonLoss()
     freq_criterion = FrequencyLoss(fps=30)
 
@@ -99,12 +140,15 @@ def run_experiment(train_ds, test_ds, epochs=30, batch_size=2, v_threshold=1.0, 
             optimizer.zero_grad()
             outputs = model(inputs)
 
-            loss_mse = mse_criterion(outputs, labels)
             loss_pearson = pearson_criterion(outputs, labels)
             loss_ce, loss_ld = freq_criterion(outputs, labels)
 
-            # Weighted loss: MSE + Freq + Pearson (for better shape)
-            loss = 0.5 * loss_mse + 0.5 * (loss_ce + loss_ld) + 0.1 * loss_pearson
+            # PhysFormer/Spiking-PhysFormer 류:
+            #   L = α · L_NegPearson + β · (L_CE + L_LD)
+            # 우리 freq loss 가 raw PSD 를 logits 으로 사용해 학습 초기 magnitude 가
+            # 매우 큼 (epoch 1 ≈ 22). 결합 시 NegPearson 이 freq 에 묻혀 phase 학습이
+            # 안되는 현상이 진단으로 확인됨 → β 를 작게 (0.1) 하여 NegPearson 우세.
+            loss = loss_pearson + 0.1 * (loss_ce + loss_ld)
 
             loss.backward()
             optimizer.step()

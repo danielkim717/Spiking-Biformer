@@ -7,12 +7,14 @@ from src.models.biformer_attention import BiLevelRoutingAttention
 class PhysBiformerBlock(nn.Module):
     def __init__(self, dim, num_heads, v_threshold, n_win=(2, 4, 4)):
         super().__init__()
-        # Use spikingjelly's layer wrappers and set multi-step mode
-        self.bn1 = layer.BatchNorm3d(dim)
+        # SNN-friendly BN: track_running_stats=False so train/eval 모두 batch stats 사용.
+        # Spike-Driven Transformer / Spiking Physformer 류에서 train-eval 발화율 불일치를
+        # 막기 위한 표준 처리.
+        self.bn1 = layer.BatchNorm3d(dim, track_running_stats=False)
         self.lif1 = neuron.LIFNode(v_threshold=v_threshold, v_reset=None, surrogate_function=surrogate.ATan(), detach_reset=True)
         self.attn = BiLevelRoutingAttention(dim, num_heads=num_heads, n_win=n_win, v_threshold=v_threshold)
 
-        self.bn2 = layer.BatchNorm3d(dim)
+        self.bn2 = layer.BatchNorm3d(dim, track_running_stats=False)
         self.lif2 = neuron.LIFNode(v_threshold=v_threshold, v_reset=None, surrogate_function=surrogate.ATan(), detach_reset=True)
         self.ffn = nn.Sequential(
             layer.Conv3d(dim, dim * 4, kernel_size=1),
@@ -60,18 +62,19 @@ class PhysBiformer(nn.Module):
         self.frame = frame
         self.T_snn = T_snn
 
-        # Stem (ANN)
+        # Stem (ANN). track_running_stats=False — train/eval 일관된 BN 동작.
         self.stem = nn.Sequential(
             nn.Conv3d(3, 16, kernel_size=(3, 3, 3), stride=patches, padding=(1, 1, 1)),
-            nn.BatchNorm3d(16),
+            nn.BatchNorm3d(16, track_running_stats=False),
             nn.ReLU(),
             nn.Conv3d(16, dim, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
-            nn.BatchNorm3d(dim),
+            nn.BatchNorm3d(dim, track_running_stats=False),
             nn.ReLU()
         )
 
-        # Temporal Positional Embedding
-        self.pos_embed = nn.Parameter(torch.zeros(1, dim, 40, 1, 1))
+        # Temporal Positional Embedding (truncated normal init — zeros 시 학습 초기 collapse 유발)
+        self.pos_embed = nn.Parameter(torch.empty(1, dim, 40, 1, 1))
+        nn.init.trunc_normal_(self.pos_embed, std=0.02)
 
         # Removed lif_input to preserve MS Shortcut benefits from the start
 
@@ -79,7 +82,21 @@ class PhysBiformer(nn.Module):
             PhysBiformerBlock(dim, num_heads, v_threshold, n_win=(2, 4, 4)) for _ in range(num_blocks)
         ])
 
-        self.head = nn.Linear(dim, 1)
+        # Prediction head — identical to PhysFormer (baseline/Physformer.py)
+        # Two stages of (Upsample 2x temporal + Conv3d + BN + ELU), then spatial GAP, then Conv1d.
+        self.upsample = nn.Sequential(
+            nn.Upsample(scale_factor=(2, 1, 1)),
+            nn.Conv3d(dim, dim, [3, 1, 1], stride=1, padding=(1, 0, 0)),
+            nn.BatchNorm3d(dim, track_running_stats=False),
+            nn.ELU(),
+        )
+        self.upsample2 = nn.Sequential(
+            nn.Upsample(scale_factor=(2, 1, 1)),
+            nn.Conv3d(dim, dim // 2, [3, 1, 1], stride=1, padding=(1, 0, 0)),
+            nn.BatchNorm3d(dim // 2, track_running_stats=False),
+            nn.ELU(),
+        )
+        self.ConvBlockLast = nn.Conv1d(dim // 2, 1, 1, stride=1, padding=0)
 
         # Set entire model to multi-step mode
         functional.set_step_mode(self, step_mode='m')
@@ -105,18 +122,15 @@ class PhysBiformer(nn.Module):
             firing_rates.append(block.last_firing_rate1)
             firing_rates.append(block.last_firing_rate2)
 
-        # 3. Head (ANN)
-        # Final output is the mean of the membrane potential across T
-        x_out = x.mean(dim=0)
-
-        # Spatial Global Average Pooling
-        x_out = x_out.mean(dim=(3, 4)) # [B, C, Lt]
-
-        # Upsample Lt to Target (160)
-        x_out = F.interpolate(x_out, size=self.frame, mode='linear', align_corners=True)
-
-        x_out = x_out.transpose(1, 2) # [B, 160, C]
-        rppg = self.head(x_out).squeeze(-1) # [B, 160]
+        # 3. Head — PhysFormer 동일 구조
+        # T_snn 평균 (membrane-potential 시간 평균) → upsample 2단계 → 공간 GAP → Conv1d
+        x_out = x.mean(dim=0)                    # [B, C, Lt, Lh, Lw]   ex) [B, 64, 40, 32, 32]
+        x_out = self.upsample(x_out)             # [B, C, 2*Lt, Lh, Lw] ex) [B, 64, 80, 32, 32]
+        x_out = self.upsample2(x_out)            # [B, C/2, 4*Lt, Lh, Lw] ex) [B, 32, 160, 32, 32]
+        x_out = torch.mean(x_out, 3)             # [B, C/2, T, Lw]
+        x_out = torch.mean(x_out, 3)             # [B, C/2, T]
+        rppg = self.ConvBlockLast(x_out)         # [B, 1, T]
+        rppg = rppg.squeeze(1)                   # [B, T]
 
         self.last_firing_rates = firing_rates
         return rppg
