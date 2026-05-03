@@ -320,7 +320,8 @@ def get_dataloader(dataset_name, root_dir, batch_size=2, clip_len=30, img_size=1
                    face_crop=False, subjects_filter=None, shuffle=True,
                    face_detection_backend='HC', larger_box_coef=1.5,
                    dynamic_detection_freq=0, data_type='standardized',
-                   dynamic_detection=None, standardize_input=None):
+                   dynamic_detection=None, standardize_input=None,
+                   drop_last=None):
     dataset = RPPGDataset(dataset_name, root_dir, clip_len=clip_len, img_size=img_size,
                           face_crop=face_crop, subjects_filter=subjects_filter,
                           face_detection_backend=face_detection_backend,
@@ -329,4 +330,9 @@ def get_dataloader(dataset_name, root_dir, batch_size=2, clip_len=30, img_size=1
                           data_type=data_type,
                           dynamic_detection=dynamic_detection,
                           standardize_input=standardize_input)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0)
+    # 마지막 incomplete batch 가 SNN 내부 BN 통계 (track_running_stats=False) 를
+    # 불안정하게 만들 수 있어 train 에서는 drop_last=True 권장.
+    if drop_last is None:
+        drop_last = bool(shuffle)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0,
+                      drop_last=drop_last)

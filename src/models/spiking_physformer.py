@@ -135,10 +135,12 @@ class SDA(nn.Module):
 
 
 # -----------------------------------------------------------------------------
-# BiLevel Routing Spike-Driven Attention (BiSDA)
-#   - 검증된 Spiking-PhysFormer 의 SDA 위에 Biformer routing 을 추가
-#   - region routing 은 LIF 직전 실수 QK 로 (변별력 보존)
-#   - SDA 본체는 window 내부 + top-k 라우팅된 K,V 만 참여
+# BiLevel Routing Spike-Driven Attention (BiSDA) — Option A 통합
+#   - Spiking-PhysFormer S3A 의 channel-sum gating 식 (`SN(SUM_c(Q⊙K_agg)) ⊙ V_agg`)
+#     을 그대로 유지 → linear complexity, 토큰간 표준 attention 없음.
+#   - Biformer routing 은 K, V 를 query window 별 top-k routed window 들의
+#     position-wise 평균으로 만들어 routing 정보를 전달.
+#   - 즉 attention 식은 SDA 와 동일, K/V 의 source 만 routed-aggregated.
 # -----------------------------------------------------------------------------
 class BiSDA(nn.Module):
     def __init__(self, dim, num_heads=4, theta=0.7, v_threshold=1.0,
@@ -218,30 +220,34 @@ class BiSDA(nn.Module):
         v_w = to_wins(v)
         # [T, B, num_wins, win_size, C]
 
-        # 4. Top-k K, V gather: 각 query window 마다 topk key window 의 토큰을 모음
+        # 4. Top-k K, V gather: 각 query window 마다 topk routed window 의 K,V 모음
         # k_src: [T, B, num_wins (query), num_wins (key), win_size, C]
         k_src = k_w.unsqueeze(2).expand(T, B, num_wins, num_wins, win_size, C)
         v_src = v_w.unsqueeze(2).expand(T, B, num_wins, num_wins, win_size, C)
         idx = routing_indices.view(1, B, num_wins, topk, 1, 1).expand(
             T, B, num_wins, topk, win_size, C)
-        k_g = torch.gather(k_src, dim=3, index=idx).flatten(3, 4)  # [T,B,num_wins,topk*win_size,C]
-        v_g = torch.gather(v_src, dim=3, index=idx).flatten(3, 4)
+        # [T, B, num_wins, topk, win_size, C] — query window 마다 topk routed window 의 토큰
+        k_routed = torch.gather(k_src, dim=3, index=idx)
+        v_routed = torch.gather(v_src, dim=3, index=idx)
 
-        # 5. Spike-Driven Attention within routed set
-        # heads: [T,B,num_wins,N_q,H,d] / [T,B,num_wins,N_k,H,d]
+        # 5. Position-wise aggregation across routed windows.
+        #    각 intra-window position p 에서 routed top-k window 의 K,V 를 평균:
+        #      K_agg[t,b,w,p] = mean_k k_routed[t,b,w,k,p]   ← [T, B, num_wins, win_size, C]
+        k_agg = k_routed.mean(dim=3)
+        v_agg = v_routed.mean(dim=3)
+
+        # 6. S3A channel-sum gating (SDA 와 동일 식, 다만 K,V 가 routed-aggregated):
+        #      attn[p] = SN(SUM_c(Q[p] ⊙ K_agg[p]))     scalar per token
+        #      out[p]  = attn[p] ⊙ V_agg[p]              token-wise mask, 토큰간 상호작용 없음
         H = self.num_heads
         d = self.head_dim
         q_h = q_w.view(T, B, num_wins, win_size, H, d)
-        k_h = k_g.view(T, B, num_wins, topk * win_size, H, d)
-        v_h = v_g.view(T, B, num_wins, topk * win_size, H, d)
+        k_h = k_agg.view(T, B, num_wins, win_size, H, d)
+        v_h = v_agg.view(T, B, num_wins, win_size, H, d)
 
-        # SDA over routed set:
-        #   score = SUM_d (Q ⊗ K) (channel-합), then SN(score), then ⊗ V
-        # einsum 으로 channel-축 합산: 'tbwqhd,tbwkhd->tbwhqk'
-        score = torch.einsum('tbwqhd,tbwkhd->tbwhqk', q_h, k_h)   # [T,B,W,H,N_q,N_k]
-        # SN(score) — Spiking-PhysFormer Eq.6 의 g(Q,K)
-        score = self.attn_lif(score)
-        out = torch.einsum('tbwhqk,tbwkhd->tbwqhd', score, v_h)   # [T,B,W,N_q,H,d]
+        attn = (q_h * k_h).sum(dim=5, keepdim=True)   # SUM_d, [T, B, W, win, H, 1]
+        attn = self.attn_lif(attn)                     # SN(SUM_c(Q ⊙ K_agg))
+        out = attn * v_h                               # [T, B, W, win, H, d]
         out = out.reshape(T, B, num_wins, win_size, C)
 
         # 6. Reverse window partition → [T, B, C, Lt, Lh, Lw]
@@ -301,6 +307,9 @@ class ParallelSDTBlock(nn.Module):
     def forward(self, x):
         identity = x
         s = self.lif_in(self.bn_in(x))
+        # Firing-rate trace (디버깅): lif_in 출력의 평균 발화율
+        with torch.no_grad():
+            self.last_firing_rate = float(s.mean().item())
         sda_out = self.sda(s)
         mlp_out = self.mlp(s)
         # Parallel MS shortcut
@@ -326,6 +335,8 @@ class ParallelBiSDTBlock(nn.Module):
     def forward(self, x):
         identity = x
         s = self.lif_in(self.bn_in(x))
+        with torch.no_grad():
+            self.last_firing_rate = float(s.mean().item())
         return identity + self.sda(s) + self.mlp(s)
 
 
@@ -445,12 +456,12 @@ class SpikingPhysformer(nn.Module):
         x = x.unsqueeze(0).expand(self.T_snn, -1, -1, -1, -1, -1).contiguous()
 
         # 3. SDT blocks
-        firing_rates = []
         for block in self.blocks:
             x = block(x)
-            # 마지막 block 의 lif_in 발화율을 trace 용으로 기록 (참고용)
-            firing_rates.append(0.0)
-        self.last_firing_rates = firing_rates
+        # 각 block lif_in 의 firing rate 수집 (forward pass 직후의 last_firing_rate)
+        self.last_firing_rates = [
+            getattr(b, 'last_firing_rate', 0.0) for b in self.blocks
+        ]
 
         # 4. T 평균 → [B, dim, 40, 4, 4]
         x = x.mean(dim=0)
