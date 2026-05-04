@@ -135,16 +135,23 @@ class SDA(nn.Module):
 
 
 # -----------------------------------------------------------------------------
-# BiLevel Routing Spike-Driven Attention (BiSDA) — Option A 통합
-#   - Spiking-PhysFormer S3A 의 channel-sum gating 식 (`SN(SUM_c(Q⊙K_agg)) ⊙ V_agg`)
-#     을 그대로 유지 → linear complexity, 토큰간 표준 attention 없음.
-#   - Biformer routing 은 K, V 를 query window 별 top-k routed window 들의
-#     position-wise 평균으로 만들어 routing 정보를 전달.
-#   - 즉 attention 식은 SDA 와 동일, K/V 의 source 만 routed-aggregated.
+# BiLevel Routing Spike-Driven Attention (BiSDA) — Pre-LIF Gating 변형
+#
+# 컨셉: window 분할 → routing 으로 gain map 산출 → K, V 의 pre-LIF membrane 에 곱.
+#   - LIF 통과 시 gain 큰 region 은 V_th 를 자주 넘어 spike 발화율 ↑
+#   - 결과: routing 정보가 spike rate 자체로 표현됨 (spike-driven 친화)
+#   - K, V 자르거나 평균하지 않고 전체 feature map 유지 → 정보 손실 없음
+#   - S3A attention 식은 paper Eq.5-8 그대로 (전체 token 대상)
+#
+# Gain 정규화 pipeline:
+#   1) channel-scale: A_r = (Q_region · K_region.T) / sqrt(dim)
+#   2) top-k softmax: top-k 안에서 부드러운 가중치 분포 (합=1)
+#   3) base + scale: routed 강조 + non-routed 보존 (기본 0.5 × scale 2.0)
 # -----------------------------------------------------------------------------
 class BiSDA(nn.Module):
     def __init__(self, dim, num_heads=4, theta=0.7, v_threshold=1.0,
-                 n_win=(2, 2, 2), topk=4):
+                 n_win=(2, 2, 2), topk=4,
+                 gain_base=0.5, gain_scale=2.0):
         super().__init__()
         assert dim % num_heads == 0
         self.dim = dim
@@ -152,6 +159,8 @@ class BiSDA(nn.Module):
         self.head_dim = dim // num_heads
         self.n_win = n_win
         self.topk = topk
+        self.gain_base = gain_base
+        self.gain_scale = gain_scale
 
         self.q_conv = _MS(CDC_T(dim, dim, kernel_size=3, padding=1, bias=False, theta=theta))
         self.q_bn = _MS(nn.BatchNorm3d(dim, track_running_stats=False))
@@ -175,6 +184,57 @@ class BiSDA(nn.Module):
         self.attn_scale = self.head_dim ** -0.5
         functional.set_step_mode(self, step_mode='m')
 
+    def _compute_gain_map(self, q_real, k_real, T, B, C, Lt, Lh, Lw):
+        """Routing similarity → per-position gain map [B, 1, Lt, Lh, Lw]."""
+        wt, wh, ww = self.n_win
+        lt, lh, lw = Lt // wt, Lh // wh, Lw // ww
+        win_size = lt * lh * lw
+        num_wins = wt * wh * ww
+
+        # Window partition: [T, B, C, Lt, Lh, Lw] → [B, num_wins, C]
+        # T 와 win_size 축에 대해 평균 → region embedding (실수, pre-LIF)
+        q_w = q_real.view(T, B, C, wt, lt, wh, lh, ww, lw)
+        q_w = q_w.permute(0, 1, 3, 5, 7, 4, 6, 8, 2).contiguous()  # [T, B, wt, wh, ww, lt, lh, lw, C]
+        q_w = q_w.view(T, B, num_wins, win_size, C)
+        q_region = q_w.mean(dim=(0, 3))  # [B, num_wins, C]
+
+        k_w = k_real.view(T, B, C, wt, lt, wh, lh, ww, lw)
+        k_w = k_w.permute(0, 1, 3, 5, 7, 4, 6, 8, 2).contiguous()
+        k_w = k_w.view(T, B, num_wins, win_size, C)
+        k_region = k_w.mean(dim=(0, 3))
+
+        # Step 1: channel-scale (sqrt(dim) 으로 magnitude 정규화)
+        a_r = (q_region @ k_region.transpose(-2, -1)) / math.sqrt(self.dim)
+        # a_r: [B, num_wins (query), num_wins (key)]
+
+        # Step 2: top-k softmax (top-k 안에서 부드러운 분포, 합=1)
+        topk = min(self.topk, num_wins)
+        topk_vals, topk_idx = torch.topk(a_r, k=topk, dim=-1)   # [B, num_wins, topk]
+        soft_weights = F.softmax(topk_vals, dim=-1)              # [B, num_wins, topk]
+
+        # Scatter to full [B, num_wins, num_wins] mask, top-k 외엔 0
+        soft_mask = torch.zeros_like(a_r)
+        soft_mask.scatter_(2, topk_idx, soft_weights)
+
+        # 각 key window 의 평균 importance (모든 query 의 routing 평균)
+        key_importance = soft_mask.mean(dim=1)   # [B, num_wins], 합 ≈ 1/num_wins 근방
+
+        # [0, 1] normalize (가장 중요한 window = 1.0)
+        max_imp = key_importance.max(dim=-1, keepdim=True).values + 1e-7
+        key_importance_norm = key_importance / max_imp           # [B, num_wins], ∈ [0, 1]
+
+        # Step 3: base + scale (routed 강조 + non-routed 보존)
+        # gain ∈ [base, base + scale]  =  [0.5, 2.5] (default)
+        gain_per_win = self.gain_base + self.gain_scale * key_importance_norm  # [B, num_wins]
+
+        # Window-level → spatial map [B, Lt, Lh, Lw]
+        gain_w = gain_per_win.view(B, wt, wh, ww, 1, 1, 1)
+        gain_w = gain_w.expand(B, wt, wh, ww, lt, lh, lw)
+        gain_w = gain_w.permute(0, 1, 4, 2, 5, 3, 6).contiguous()  # [B, wt, lt, wh, lh, ww, lw]
+        gain_w = gain_w.view(B, Lt, Lh, Lw)
+        # Add C-axis for broadcast over channel, T_snn axis for time
+        return gain_w.unsqueeze(0).unsqueeze(2)   # [1, B, 1, Lt, Lh, Lw]
+
     def forward(self, x):
         """x: [T, B, C, Lt, Lh, Lw]"""
         T, B, C, Lt, Lh, Lw = x.shape
@@ -188,77 +248,42 @@ class BiSDA(nn.Module):
             x = F.pad(x, (0, pad_w, 0, pad_h, 0, pad_t))
             _, _, _, Lt, Lh, Lw = x.shape
 
-        # 1. Q, K (실수, pre-LIF) — routing 신호
-        q_real = self.q_bn(self.q_conv(x))
-        k_real = self.k_bn(self.k_conv(x))
+        # 1. Q, K, V branches (LIF 직전 실수)
+        q_pre = self.q_bn(self.q_conv(x))   # [T, B, C, Lt, Lh, Lw]
+        k_pre = self.k_bn(self.k_conv(x))
+        v_pre = self.v_bn(x)
 
-        # 2. 윈도우 분할 후 region 임베딩 (실수)
-        lt, lh, lw = Lt // wt, Lh // wh, Lw // ww
-        win_size = lt * lh * lw
-        num_wins = wt * wh * ww
+        # 2. Routing similarity → gain map (per spatial position)
+        # gain: [1, B, 1, Lt, Lh, Lw], broadcast over T_snn, C
+        gain = self._compute_gain_map(q_pre, k_pre, T, B, C, Lt, Lh, Lw)
 
-        def to_wins(t):  # [T,B,C,Lt,Lh,Lw] → [T,B,num_wins,win_size,C]
-            t = t.view(T, B, C, wt, lt, wh, lh, ww, lw)
-            t = t.permute(0, 1, 3, 5, 7, 4, 6, 8, 2).contiguous()
-            t = t.view(T, B, num_wins, win_size, C)
-            return t
+        # 3. K, V membrane modulate. Q 는 그대로 (query 자체는 routing 의 source).
+        # routed region 의 K, V membrane 이 커져서 LIF 통과 시 spike 발화율 ↑
+        k_pre_gated = k_pre * gain
+        v_pre_gated = v_pre * gain
 
-        q_real_w = to_wins(q_real)
-        k_real_w = to_wins(k_real)
-        q_region = q_real_w.mean(dim=(0, 3))  # [B, num_wins, C]
-        k_region = k_real_w.mean(dim=(0, 3))
-        a_r = (q_region @ k_region.transpose(-2, -1)) * self.attn_scale
-        topk = min(self.topk, num_wins)
-        routing_indices = torch.topk(a_r, k=topk, dim=-1).indices   # [B, num_wins, topk]
+        # 4. LIF → spike (routed region 의 spike rate 가 자연스럽게 큼)
+        q = self.q_lif(q_pre)
+        k = self.k_lif(k_pre_gated)
+        v = self.v_lif(v_pre_gated)
 
-        # 3. Spike Q, K, V
-        q = self.q_lif(q_real)
-        k = self.k_lif(k_real)
-        v = self.v_lif(self.v_bn(x))
-        q_w = to_wins(q)
-        k_w = to_wins(k)
-        v_w = to_wins(v)
-        # [T, B, num_wins, win_size, C]
-
-        # 4. Top-k K, V gather: 각 query window 마다 topk routed window 의 K,V 모음
-        # k_src: [T, B, num_wins (query), num_wins (key), win_size, C]
-        k_src = k_w.unsqueeze(2).expand(T, B, num_wins, num_wins, win_size, C)
-        v_src = v_w.unsqueeze(2).expand(T, B, num_wins, num_wins, win_size, C)
-        idx = routing_indices.view(1, B, num_wins, topk, 1, 1).expand(
-            T, B, num_wins, topk, win_size, C)
-        # [T, B, num_wins, topk, win_size, C] — query window 마다 topk routed window 의 토큰
-        k_routed = torch.gather(k_src, dim=3, index=idx)
-        v_routed = torch.gather(v_src, dim=3, index=idx)
-
-        # 5. Position-wise aggregation across routed windows.
-        #    각 intra-window position p 에서 routed top-k window 의 K,V 를 평균:
-        #      K_agg[t,b,w,p] = mean_k k_routed[t,b,w,k,p]   ← [T, B, num_wins, win_size, C]
-        k_agg = k_routed.mean(dim=3)
-        v_agg = v_routed.mean(dim=3)
-
-        # 6. S3A channel-sum gating (SDA 와 동일 식, 다만 K,V 가 routed-aggregated):
-        #      attn[p] = SN(SUM_c(Q[p] ⊙ K_agg[p]))     scalar per token
-        #      out[p]  = attn[p] ⊙ V_agg[p]              token-wise mask, 토큰간 상호작용 없음
+        # 5. S3A — full feature map 그대로 (Spiking-PhysFormer Eq.5-8)
+        N = Lt * Lh * Lw
         H = self.num_heads
         d = self.head_dim
-        q_h = q_w.view(T, B, num_wins, win_size, H, d)
-        k_h = k_agg.view(T, B, num_wins, win_size, H, d)
-        v_h = v_agg.view(T, B, num_wins, win_size, H, d)
+        q_r = q.reshape(T, B, H, d, N)
+        k_r = k.reshape(T, B, H, d, N)
+        v_r = v.reshape(T, B, H, d, N)
 
-        attn = (q_h * k_h).sum(dim=5, keepdim=True)   # SUM_d, [T, B, W, win, H, 1]
-        attn = self.attn_lif(attn)                     # SN(SUM_c(Q ⊙ K_agg))
-        out = attn * v_h                               # [T, B, W, win, H, d]
-        out = out.reshape(T, B, num_wins, win_size, C)
-
-        # 6. Reverse window partition → [T, B, C, Lt, Lh, Lw]
-        out = out.view(T, B, wt, wh, ww, lt, lh, lw, C)
-        out = out.permute(0, 1, 8, 2, 5, 3, 6, 4, 7).contiguous()
-        out = out.view(T, B, C, Lt, Lh, Lw)
+        attn = (q_r * k_r).sum(dim=3, keepdim=True)   # SUM_c(Q⊙K), [T, B, H, 1, N]
+        attn = self.attn_lif(attn)                     # SN
+        out = attn * v_r                               # [T, B, H, d, N]
+        out = out.reshape(T, B, C, Lt, Lh, Lw)
 
         if pad_t or pad_h or pad_w:
             out = out[:, :, :, :Lt - pad_t, :Lh - pad_h, :Lw - pad_w]
 
-        # 7. SN(out) → Conv → BN  (membrane out, 마지막 LIF 없음)
+        # 6. SN → Conv → BN (membrane out)
         out = self.proj_lif(out)
         out = self.proj_bn(self.proj_conv(out))
         return out
