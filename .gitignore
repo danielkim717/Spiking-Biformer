@@ -5,6 +5,9 @@ venv/
 __pycache__/
 *.pyc
 results/current_status.json
+results/current_status_biphys.json
+results/live_progress.md
+results/live_progress_biphys.md
 results/periodic_log.txt
 results/tune_log.txt
 results/startup_error.txt
@@ -13,3 +16,11 @@ results/startup_error.txt
 D:/
 logs/
 *.log
+# Paper sources (too large / external)
+paper.pdf
+paper_abs.html
+paper_v4.html
+paper_text.txt
+paper_chunk_*.txt
+# Scheduled task lock
+.claude/scheduled_tasks.lock

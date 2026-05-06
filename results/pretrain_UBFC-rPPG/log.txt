@@ -1,0 +1,88 @@
+[*] PhysFormer pretrain on UBFC-rPPG (cuda)
+  EPOCHS=10  BATCH=4  LR=0.0001  WD=5e-05
+  train clips (80%): 362
+  model params: 7380865
+
+[*] Epoch 1/10  α=0.1, β=1.0000
+  step 0/90  loss=8.569  lr=4.00e-06
+  step 20/90  loss=8.559  lr=5.44e-06
+  step 40/90  loss=8.553  lr=9.40e-06
+  step 60/90  loss=8.687  lr=1.57e-05
+  step 80/90  loss=8.531  lr=2.39e-05
+  Epoch 1 avg loss 8.5678  (1458s)
+
+[*] Epoch 2/10  α=0.1, β=1.1746
+  step 0/90  loss=10.030  lr=2.87e-05
+  step 20/90  loss=10.007  lr=3.90e-05
+  step 40/90  loss=10.050  lr=5.00e-05
+  step 60/90  loss=10.017  lr=6.12e-05
+  step 80/90  loss=10.011  lr=7.18e-05
+  Epoch 2 avg loss 10.0247  (1005s)
+
+[*] Epoch 3/10  α=0.1, β=1.3797
+  step 0/90  loss=11.711  lr=7.68e-05
+  step 20/90  loss=11.676  lr=8.56e-05
+  step 40/90  loss=11.658  lr=9.27e-05
+  step 60/90  loss=11.634  lr=9.75e-05
+  step 80/90  loss=11.671  lr=9.98e-05
+  Epoch 3 avg loss 11.6666  (1004s)
+
+[*] Epoch 4/10  α=0.1, β=1.6207
+  step 0/90  loss=13.658  lr=1.00e-04
+  step 20/90  loss=13.634  lr=9.97e-05
+  step 40/90  loss=13.661  lr=9.89e-05
+  step 60/90  loss=13.615  lr=9.76e-05
+  step 80/90  loss=13.647  lr=9.59e-05
+  Epoch 4 avg loss 13.6540  (995s)
+
+[*] Epoch 5/10  α=0.1, β=1.9037
+  step 0/90  loss=16.001  lr=9.48e-05
+  step 20/90  loss=16.006  lr=9.24e-05
+  step 40/90  loss=15.955  lr=8.96e-05
+  step 60/90  loss=16.021  lr=8.63e-05
+  step 80/90  loss=15.976  lr=8.27e-05
+  Epoch 5 avg loss 16.0112  (983s)
+
+[*] Epoch 6/10  α=0.1, β=2.2361
+  step 0/90  loss=18.730  lr=8.08e-05
+  step 20/90  loss=18.733  lr=7.67e-05
+  step 40/90  loss=18.803  lr=7.24e-05
+  step 60/90  loss=18.733  lr=6.78e-05
+  step 80/90  loss=18.734  lr=6.31e-05
+  Epoch 6 avg loss 18.7814  (1005s)
+
+[*] Epoch 7/10  α=0.1, β=2.6265
+  step 0/90  loss=22.019  lr=6.06e-05
+  step 20/90  loss=22.024  lr=5.57e-05
+  step 40/90  loss=21.993  lr=5.07e-05
+  step 60/90  loss=21.980  lr=4.58e-05
+  step 80/90  loss=22.001  lr=4.08e-05
+  Epoch 7 avg loss 22.0343  (993s)
+
+[*] Epoch 8/10  α=0.1, β=3.0852
+  step 0/90  loss=25.802  lr=3.84e-05
+  step 20/90  loss=25.810  lr=3.36e-05
+  step 40/90  loss=25.796  lr=2.90e-05
+  step 60/90  loss=26.207  lr=2.46e-05
+  step 80/90  loss=25.843  lr=2.04e-05
+  Epoch 8 avg loss 25.8566  (1003s)
+
+[*] Epoch 9/10  α=0.1, β=3.6239
+  step 0/90  loss=30.334  lr=1.84e-05
+  step 20/90  loss=30.225  lr=1.47e-05
+  step 40/90  loss=30.336  lr=1.14e-05
+  step 60/90  loss=30.337  lr=8.41e-06
+  step 80/90  loss=30.309  lr=5.85e-06
+  Epoch 9 avg loss 30.3506  (1029s)
+
+[*] Epoch 10/10  α=0.1, β=4.2567
+  step 0/90  loss=35.613  lr=4.74e-06
+  step 20/90  loss=35.595  lr=2.85e-06
+  step 40/90  loss=35.502  lr=1.43e-06
+  step 60/90  loss=35.626  lr=4.87e-07
+  step 80/90  loss=35.635  lr=4.02e-08
+  Epoch 10 avg loss 35.6382  (1019s)
+
+[*] Saved PE block weights → checkpoints\pretrained_pe_UBFC-rPPG.pt
+  num tensors: 23
+  total params: 748083

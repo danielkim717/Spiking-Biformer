@@ -1,0 +1,118 @@
+[*] PhysFormer pretrain on PURE (cuda)
+  EPOCHS=10  BATCH=4  LR=0.0001  WD=5e-05
+  train clips (80%): 592
+  model params: 7380865
+
+[*] Epoch 1/10  α=0.1, β=1.0000
+  step 0/148  loss=8.562  lr=4.00e-06
+  step 20/148  loss=8.515  lr=4.53e-06
+  step 40/148  loss=8.574  lr=6.01e-06
+  step 60/148  loss=8.549  lr=8.42e-06
+  step 80/148  loss=8.560  lr=1.17e-05
+  step 100/148  loss=8.561  lr=1.58e-05
+  step 120/148  loss=8.550  lr=2.06e-05
+  step 140/148  loss=8.533  lr=2.61e-05
+  Epoch 1 avg loss 8.5479  (2181s)
+
+[*] Epoch 2/10  α=0.1, β=1.1746
+  step 0/148  loss=9.994  lr=2.84e-05
+  step 20/148  loss=10.005  lr=3.45e-05
+  step 40/148  loss=10.011  lr=4.10e-05
+  step 60/148  loss=10.024  lr=4.78e-05
+  step 80/148  loss=10.006  lr=5.46e-05
+  step 100/148  loss=9.957  lr=6.13e-05
+  step 120/148  loss=10.005  lr=6.79e-05
+  step 140/148  loss=9.989  lr=7.41e-05
+  Epoch 2 avg loss 10.0167  (2077s)
+
+[*] Epoch 3/10  α=0.1, β=1.3797
+  step 0/148  loss=11.721  lr=7.65e-05
+  step 20/148  loss=11.725  lr=8.21e-05
+  step 40/148  loss=11.772  lr=8.71e-05
+  step 60/148  loss=11.725  lr=9.13e-05
+  step 80/148  loss=11.768  lr=9.48e-05
+  step 100/148  loss=11.754  lr=9.75e-05
+  step 120/148  loss=11.735  lr=9.92e-05
+  step 140/148  loss=11.709  lr=1.00e-04
+  Epoch 3 avg loss 11.7447  (2127s)
+
+[*] Epoch 4/10  α=0.1, β=1.6207
+  step 0/148  loss=13.716  lr=1.00e-04
+  step 20/148  loss=13.810  lr=9.99e-05
+  step 40/148  loss=13.764  lr=9.96e-05
+  step 60/148  loss=13.779  lr=9.91e-05
+  step 80/148  loss=13.814  lr=9.85e-05
+  step 100/148  loss=13.741  lr=9.76e-05
+  step 120/148  loss=13.788  lr=9.66e-05
+  step 140/148  loss=13.721  lr=9.54e-05
+  Epoch 4 avg loss 13.7799  (2094s)
+
+[*] Epoch 5/10  α=0.1, β=1.9037
+  step 0/148  loss=16.185  lr=9.49e-05
+  step 20/148  loss=16.236  lr=9.35e-05
+  step 40/148  loss=16.163  lr=9.19e-05
+  step 60/148  loss=16.234  lr=9.02e-05
+  step 80/148  loss=16.227  lr=8.83e-05
+  step 100/148  loss=16.187  lr=8.63e-05
+  step 120/148  loss=16.162  lr=8.42e-05
+  step 140/148  loss=16.177  lr=8.19e-05
+  Epoch 5 avg loss 16.1644  (2091s)
+
+[*] Epoch 6/10  α=0.1, β=2.2361
+  step 0/148  loss=19.257  lr=8.09e-05
+  step 20/148  loss=18.932  lr=7.85e-05
+  step 40/148  loss=18.984  lr=7.60e-05
+  step 60/148  loss=18.887  lr=7.33e-05
+  step 80/148  loss=18.901  lr=7.06e-05
+  step 100/148  loss=18.986  lr=6.78e-05
+  step 120/148  loss=18.919  lr=6.49e-05
+  step 140/148  loss=19.004  lr=6.20e-05
+  Epoch 6 avg loss 18.9131  (2080s)
+
+[*] Epoch 7/10  α=0.1, β=2.6265
+  step 0/148  loss=22.132  lr=6.08e-05
+  step 20/148  loss=22.295  lr=5.79e-05
+  step 40/148  loss=22.207  lr=5.48e-05
+  step 60/148  loss=22.203  lr=5.18e-05
+  step 80/148  loss=22.104  lr=4.88e-05
+  step 100/148  loss=22.080  lr=4.58e-05
+  step 120/148  loss=22.108  lr=4.27e-05
+  step 140/148  loss=22.048  lr=3.98e-05
+  Epoch 7 avg loss 22.1464  (2102s)
+
+[*] Epoch 8/10  α=0.1, β=3.0852
+  step 0/148  loss=25.912  lr=3.86e-05
+  step 20/148  loss=25.940  lr=3.56e-05
+  step 40/148  loss=25.991  lr=3.28e-05
+  step 60/148  loss=25.967  lr=3.00e-05
+  step 80/148  loss=26.042  lr=2.72e-05
+  step 100/148  loss=25.958  lr=2.46e-05
+  step 120/148  loss=25.943  lr=2.20e-05
+  step 140/148  loss=26.070  lr=1.95e-05
+  Epoch 8 avg loss 25.9717  (2104s)
+
+[*] Epoch 9/10  α=0.1, β=3.6239
+  step 0/148  loss=30.399  lr=1.86e-05
+  step 20/148  loss=30.402  lr=1.63e-05
+  step 40/148  loss=30.497  lr=1.41e-05
+  step 60/148  loss=30.949  lr=1.21e-05
+  step 80/148  loss=30.514  lr=1.02e-05
+  step 100/148  loss=30.393  lr=8.41e-06
+  step 120/148  loss=30.623  lr=6.80e-06
+  step 140/148  loss=30.603  lr=5.35e-06
+  Epoch 9 avg loss 30.4797  (2075s)
+
+[*] Epoch 10/10  α=0.1, β=4.2567
+  step 0/148  loss=35.792  lr=4.82e-06
+  step 20/148  loss=35.878  lr=3.61e-06
+  step 40/148  loss=36.030  lr=2.56e-06
+  step 60/148  loss=35.826  lr=1.69e-06
+  step 80/148  loss=35.680  lr=9.98e-07
+  step 100/148  loss=35.953  lr=4.86e-07
+  step 120/148  loss=35.668  lr=1.56e-07
+  step 140/148  loss=35.785  lr=8.68e-09
+  Epoch 10 avg loss 35.7792  (2088s)
+
+[*] Saved PE block weights → checkpoints\pretrained_pe_PURE.pt
+  num tensors: 23
+  total params: 748083

@@ -1,0 +1,183 @@
+[*] Seed fixed to 42
+
+======================================================================
+[*] PURE -> UBFC-rPPG
+======================================================================
+  train clips: 592 (80% of PURE)
+  valid clips: 153 (20% of PURE) — used for best-epoch selection
+  test  clips: 470 (UBFC-rPPG)
+  pretrained PE block: checkpoints/pretrained_pe_PURE.pt
+  model params: 7380865
+  loss: α=0.1 (NegPearson) + β·(CE+LD), β = 1.0·5.0^((e-1)/10)
+  optim: Adam(lr=0.0001, wd=5e-05) + OneCycleLR(max_lr=0.0001, steps=1480)
+  grad_clip: max_norm=1.0
+
+[*] Epoch 1/10  α=0.1, β=1.0000
+  current_lr: 2.81e-05
+
+Epoch 1/10: Train avg loss 8.5294
+  VALID (source 20%)   per-clip Pearson 0.1848  pooled 0.1766  HR MAE 17.206 BPM
+  TEST  (target full)  per-clip Pearson -0.1538  pooled -0.1315  HR MAE 9.311 BPM  RMSE 19.492 BPM  MAPE 8.53%
+
+[*] Epoch 2/10  α=0.1, β=1.1746
+  current_lr: 7.62e-05
+
+Epoch 2/10: Train avg loss 9.9529
+  VALID (source 20%)   per-clip Pearson 0.1992  pooled 0.2008  HR MAE 17.941 BPM
+  TEST  (target full)  per-clip Pearson -0.0331  pooled -0.0288  HR MAE 10.723 BPM  RMSE 21.856 BPM  MAPE 9.96%
+
+[*] Epoch 3/10  α=0.1, β=1.3797
+  current_lr: 1.00e-04
+
+Epoch 3/10: Train avg loss 11.6684
+  VALID (source 20%)   per-clip Pearson 0.2205  pooled 0.2175  HR MAE 20.588 BPM
+  TEST  (target full)  per-clip Pearson 0.0303  pooled 0.0319  HR MAE 4.739 BPM  RMSE 12.921 BPM  MAPE 4.49%
+
+[*] Epoch 4/10  α=0.1, β=1.6207
+  current_lr: 9.50e-05
+
+Epoch 4/10: Train avg loss 13.6822
+  VALID (source 20%)   per-clip Pearson 0.1734  pooled 0.1681  HR MAE 21.176 BPM
+  TEST  (target full)  per-clip Pearson -0.0685  pooled -0.0641  HR MAE 14.793 BPM  RMSE 25.967 BPM  MAPE 13.93%
+
+[*] Epoch 5/10  α=0.1, β=1.9037
+  current_lr: 8.11e-05
+
+Epoch 5/10: Train avg loss 16.0490
+  VALID (source 20%)   per-clip Pearson 0.2343  pooled 0.2380  HR MAE 21.397 BPM
+  TEST  (target full)  per-clip Pearson -0.0066  pooled -0.0034  HR MAE 5.218 BPM  RMSE 13.250 BPM  MAPE 5.09%
+
+[*] Epoch 6/10  α=0.1, β=2.2361
+  current_lr: 6.10e-05
+
+Epoch 6/10: Train avg loss 18.8258
+  VALID (source 20%)   per-clip Pearson 0.2354  pooled 0.2418  HR MAE 21.912 BPM
+  TEST  (target full)  per-clip Pearson -0.0918  pooled -0.0791  HR MAE 5.864 BPM  RMSE 14.409 BPM  MAPE 5.78%
+
+[*] Epoch 7/10  α=0.1, β=2.6265
+  current_lr: 3.87e-05
+
+Epoch 7/10: Train avg loss 22.0705
+  VALID (source 20%)   per-clip Pearson 0.2243  pooled 0.2276  HR MAE 22.574 BPM
+  TEST  (target full)  per-clip Pearson 0.0086  pooled 0.0099  HR MAE 5.601 BPM  RMSE 14.173 BPM  MAPE 5.72%
+
+[*] Epoch 8/10  α=0.1, β=3.0852
+  current_lr: 1.87e-05
+
+Epoch 8/10: Train avg loss 25.8927
+  VALID (source 20%)   per-clip Pearson 0.2377  pooled 0.2459  HR MAE 22.500 BPM
+  TEST  (target full)  per-clip Pearson 0.0533  pooled 0.0494  HR MAE 5.146 BPM  RMSE 13.382 BPM  MAPE 5.32%
+
+[*] Epoch 9/10  α=0.1, β=3.6239
+  current_lr: 4.89e-06
+
+Epoch 9/10: Train avg loss 30.3797
+  VALID (source 20%)   per-clip Pearson 0.2352  pooled 0.2426  HR MAE 23.382 BPM
+  TEST  (target full)  per-clip Pearson 0.0785  pooled 0.0744  HR MAE 5.601 BPM  RMSE 13.749 BPM  MAPE 5.81%
+
+[*] Epoch 10/10  α=0.1, β=4.2567
+  current_lr: 6.30e-10
+
+Epoch 10/10: Train avg loss 35.6615
+  VALID (source 20%)   per-clip Pearson 0.2322  pooled 0.2377  HR MAE 23.309 BPM
+  TEST  (target full)  per-clip Pearson 0.0621  pooled 0.0577  HR MAE 5.936 BPM  RMSE 14.400 BPM  MAPE 6.19%
+
+→ Best for PURE -> UBFC-rPPG: epoch 8 (selected by valid per-clip Pearson 0.2377)
+   TEST per-clip Pearson 0.0533  pooled 0.0494
+   TEST HR  MAE 5.146 BPM  RMSE 13.382 BPM  MAPE 5.32%
+
+======================================================================
+[*] UBFC-rPPG -> PURE
+======================================================================
+  train clips: 362 (80% of UBFC-rPPG)
+  valid clips: 108 (20% of UBFC-rPPG) — used for best-epoch selection
+  test  clips: 745 (PURE)
+  pretrained PE block: checkpoints/pretrained_pe_UBFC-rPPG.pt
+  model params: 7380865
+  loss: α=0.1 (NegPearson) + β·(CE+LD), β = 1.0·5.0^((e-1)/10)
+  optim: Adam(lr=0.0001, wd=5e-05) + OneCycleLR(max_lr=0.0001, steps=900)
+  grad_clip: max_norm=1.0
+
+[*] Epoch 1/10  α=0.1, β=1.0000
+  current_lr: 2.82e-05
+
+Epoch 1/10: Train avg loss 8.4994
+  VALID (source 20%)   per-clip Pearson 0.5424  pooled 0.5356  HR MAE 2.396 BPM
+  TEST  (target full)  per-clip Pearson -0.0179  pooled -0.0141  HR MAE 12.911 BPM  RMSE 23.100 BPM  MAPE 17.15%
+
+[*] Epoch 2/10  α=0.1, β=1.1746
+  current_lr: 7.63e-05
+
+Epoch 2/10: Train avg loss 9.9104
+  VALID (source 20%)   per-clip Pearson 0.6514  pooled 0.6515  HR MAE 1.875 BPM
+  TEST  (target full)  per-clip Pearson -0.0153  pooled -0.0087  HR MAE 15.161 BPM  RMSE 26.230 BPM  MAPE 22.47%
+
+[*] Epoch 3/10  α=0.1, β=1.3797
+  current_lr: 1.00e-04
+
+Epoch 3/10: Train avg loss 11.6159
+  VALID (source 20%)   per-clip Pearson 0.6198  pooled 0.6242  HR MAE 1.354 BPM
+  TEST  (target full)  per-clip Pearson -0.0103  pooled -0.0066  HR MAE 14.466 BPM  RMSE 24.819 BPM  MAPE 19.46%
+
+[*] Epoch 4/10  α=0.1, β=1.6207
+  current_lr: 9.49e-05
+
+Epoch 4/10: Train avg loss 13.6240
+  VALID (source 20%)   per-clip Pearson 0.6656  pooled 0.6701  HR MAE 1.458 BPM
+  TEST  (target full)  per-clip Pearson 0.0081  pooled 0.0120  HR MAE 14.195 BPM  RMSE 24.377 BPM  MAPE 20.16%
+
+[*] Epoch 5/10  α=0.1, β=1.9037
+  current_lr: 8.10e-05
+
+Epoch 5/10: Train avg loss 15.9777
+  VALID (source 20%)   per-clip Pearson 0.6880  pooled 0.6850  HR MAE 2.396 BPM
+  TEST  (target full)  per-clip Pearson -0.0093  pooled -0.0018  HR MAE 16.384 BPM  RMSE 26.791 BPM  MAPE 24.40%
+
+[*] Epoch 6/10  α=0.1, β=2.2361
+  current_lr: 6.09e-05
+
+Epoch 6/10: Train avg loss 18.7481
+  VALID (source 20%)   per-clip Pearson 0.6784  pooled 0.6811  HR MAE 1.771 BPM
+  TEST  (target full)  per-clip Pearson 0.0026  pooled 0.0086  HR MAE 14.829 BPM  RMSE 24.363 BPM  MAPE 21.07%
+
+[*] Epoch 7/10  α=0.1, β=2.6265
+  current_lr: 3.86e-05
+
+Epoch 7/10: Train avg loss 22.0009
+  VALID (source 20%)   per-clip Pearson 0.6631  pooled 0.6669  HR MAE 1.875 BPM
+  TEST  (target full)  per-clip Pearson 0.0011  pooled 0.0072  HR MAE 16.082 BPM  RMSE 25.849 BPM  MAPE 23.32%
+
+[*] Epoch 8/10  α=0.1, β=3.0852
+  current_lr: 1.86e-05
+
+Epoch 8/10: Train avg loss 25.8225
+  VALID (source 20%)   per-clip Pearson 0.6736  pooled 0.6767  HR MAE 1.667 BPM
+  TEST  (target full)  per-clip Pearson 0.0123  pooled 0.0172  HR MAE 14.557 BPM  RMSE 24.216 BPM  MAPE 20.87%
+
+[*] Epoch 9/10  α=0.1, β=3.6239
+  current_lr: 4.84e-06
+
+Epoch 9/10: Train avg loss 30.3127
+  VALID (source 20%)   per-clip Pearson 0.6693  pooled 0.6736  HR MAE 1.354 BPM
+  TEST  (target full)  per-clip Pearson 0.0100  pooled 0.0148  HR MAE 15.010 BPM  RMSE 24.328 BPM  MAPE 21.48%
+
+[*] Epoch 10/10  α=0.1, β=4.2567
+  current_lr: 1.02e-09
+
+Epoch 10/10: Train avg loss 35.5957
+  VALID (source 20%)   per-clip Pearson 0.6682  pooled 0.6722  HR MAE 1.667 BPM
+  TEST  (target full)  per-clip Pearson 0.0076  pooled 0.0125  HR MAE 15.146 BPM  RMSE 24.658 BPM  MAPE 21.76%
+
+→ Best for UBFC-rPPG -> PURE: epoch 5 (selected by valid per-clip Pearson 0.6880)
+   TEST per-clip Pearson -0.0093  pooled -0.0018
+   TEST HR  MAE 16.384 BPM  RMSE 26.791 BPM  MAPE 24.40%
+
+======================================================================
+[*] 종합 결과 — BiPhysFormer (ANN, BiFormer)
+======================================================================
+  PURE -> UBFC-rPPG:
+    Best @ epoch 8: per-clip Pearson = 0.0533  (pooled 0.0494)
+      HR  MAE 5.146 BPM  RMSE 13.382 BPM  MAPE 5.32%
+  UBFC-rPPG -> PURE:
+    Best @ epoch 5: per-clip Pearson = -0.0093  (pooled -0.0018)
+      HR  MAE 16.384 BPM  RMSE 26.791 BPM  MAPE 24.40%
