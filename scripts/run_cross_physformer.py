@@ -1,25 +1,16 @@
 """
-Cross-dataset 학습-평가 — BiPhysFormer (PhysFormer + BiLevel Routing, ANN).
+Cross-dataset 학습-평가 — PhysFormer baseline (no BiFormer, full MHSA attention).
 
-PhysFormer 공식 학습 셋업을 그대로 따름
-(https://github.com/ZitongYu/PhysFormer/blob/main/train_Physformer_160_VIPL.py):
-  - 모델: ViT_BiPhysFormer(dim=96, ff_dim=144, num_heads=4, num_layers=12,
-                          dropout=0.1, theta=0.7, n_win=(2,2,2), topk=4)
-  - Optimizer: Adam(lr=1e-4, wd=5e-5)
-  - LR scheduler: StepLR(step_size=50, gamma=0.5)  (25 epoch 동안 사실상 constant)
-  - Batch size: 4
-  - Epochs: 25  (PhysFormer paper)
-  - 출력 정규화 (공식 코드 line 190): rPPG = (rPPG - mean) / std  ← 매우 중요
-  - 손실: L = α·NegPearson + β·(L_CE + L_LD)
-        α = 0.1 (공식 코드는 epoch>25 일 때만 0.05; 우리는 25 epoch 학습이라 항상 0.1)
-        β = β₀ · η^(epoch/25),  β₀=1.0, η=5.0  (공식 schedule)
-  - gra_sharp = 2.0 (forward 인자)
-  - Best 기준: source valid per-clip Pearson
-  - HR metric: 2nd-order Butterworth (0.75-2.5 Hz) + FFT peak
+목적: rPPG-Toolbox 가 보고한 PhysFormer paper 수치
+       (PURE→UBFC MAE=1.44 ρ=0.98, UBFC→PURE MAE=12.92 ρ=0.47) 재현 가능 여부 확인.
+       우리 학습 setup이 paper level 도달 가능한지 검증.
+
+학습 셋업: rPPG-Toolbox PhysFormerTrainer 와 100% 동일 (run_cross_biphysformer.py 와 같음).
+모델만 ViT_BiPhysFormer (BiFormer) → ViT_ST_ST_Compact3_TDC_gra_sharp (full MHSA) 교체.
 
 순차 실행:
-  1) PURE → UBFC-rPPG  (25 epoch)
-  2) UBFC-rPPG → PURE  (25 epoch)
+  1) PURE → UBFC-rPPG  (30 epoch)
+  2) UBFC-rPPG → PURE  (30 epoch)
 """
 import os
 import sys
@@ -43,16 +34,16 @@ except Exception:
 import numpy as np
 import torch
 import torch.optim as optim
+import scipy.signal
 from scipy.signal import welch
 
-from src.models.biphysformer import ViT_BiPhysFormer
+from src.models.physformer_baseline import ViT_ST_ST_Compact3_TDC_gra_sharp
 from src.data.rppg_dataset import get_dataloader
 from src.train import NegPearsonLoss, FrequencyLoss
 from src.evaluation import evaluate_per_subject, get_subject_signals
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import scipy.signal
 
 
 def save_waveform_plot(subject_signals, out_path, fs=30, n_max=4, title=''):
@@ -69,16 +60,19 @@ def save_waveform_plot(subject_signals, out_path, fs=30, n_max=4, title=''):
     for i, (vid, s) in enumerate(items):
         T = len(s['pred_filt'])
         t = np.arange(T) / fs
+        # Left: filtered (post-processed) - shows HR estimation domain
         ax = axes[i, 0]
+        # Normalize for visual comparison
         pf = (s['pred_filt'] - s['pred_filt'].mean()) / (s['pred_filt'].std() + 1e-9)
         gf = (s['gt_filt'] - s['gt_filt'].mean()) / (s['gt_filt'].std() + 1e-9)
         ax.plot(t, gf, 'g-', label='GT (filtered)', linewidth=0.8, alpha=0.8)
         ax.plot(t, pf, 'r-', label='Pred (filtered)', linewidth=0.8, alpha=0.8)
         ax.set_title(f"{vid}  HR_gt={s['hr_gt']:.1f}  HR_pred={s['hr_pred']:.1f}  err={abs(s['hr_pred']-s['hr_gt']):.1f}",
                      fontsize=9)
-        ax.set_xlim(0, min(15, t[-1]))
+        ax.set_xlim(0, min(15, t[-1]))  # first 15 sec for clarity
         ax.legend(fontsize=7, loc='upper right')
         ax.set_xlabel('time (s)', fontsize=7)
+        # Right: FFT spectrum
         ax = axes[i, 1]
         N = 2 ** int(np.ceil(np.log2(T)))
         f_pred, p_pred = scipy.signal.periodogram(s['pred_filt'], fs=fs, nfft=N)
@@ -137,10 +131,10 @@ EXPERIMENTS = [
     ('UBFC-rPPG', UBFC_PATH, 'PURE', PURE_PATH),
 ]
 
-RESULT_DIR = 'results/cross_biphysformer'
+RESULT_DIR = 'results/cross_physformer'
 LOG = os.path.join(RESULT_DIR, 'log.txt')
-LIVE_FILE = os.path.join('results', 'live_progress_biphys.md')
-STATUS_FILE = os.path.join('results', 'current_status_biphys.json')
+LIVE_FILE = os.path.join('results', 'live_progress_phys.md')
+STATUS_FILE = os.path.join('results', 'current_status_phys.json')
 
 _state = {'started_at': None, 'stop': False, 'completed': []}
 
@@ -191,7 +185,7 @@ def _save_status(d):
 
 def _live(now, status):
     lines = [
-        '# 📊 BiPhysFormer (ANN, BiFormer) — Cross-Dataset',
+        '# 📊 PhysFormer baseline (ANN, full MHSA) — Cross-Dataset',
         '',
         f"**마지막 업데이트**: {now.strftime('%Y-%m-%d %H:%M:%S')}",
         '',
@@ -251,19 +245,19 @@ def run_experiment(train_name, train_path, test_name, test_path):
                                   face_crop=True, shuffle=False,
                                   data_type='diff_normalized',
                                   dynamic_detection_freq=DETECTION_FREQ,
-                                  split_range=(0.8, 1.0))
+                                  split_range=(0.8, 1.0))  # non-overlapping (속도)
     test_loader = get_dataloader(test_name, test_path, BATCH_SIZE, clip_len=160,
                                  face_crop=True, shuffle=False,
                                  data_type='diff_normalized', chunk_step=80,
-                                 dynamic_detection_freq=DETECTION_FREQ)
+                                 dynamic_detection_freq=DETECTION_FREQ)  # 2× overlap
     log(f"  train clips: {len(train_loader.dataset)} (80% of {train_name})")
     log(f"  valid clips: {len(valid_loader.dataset)} (20% of {train_name}) - used for best-epoch selection")
     log(f"  test  clips: {len(test_loader.dataset)} ({test_name})")
 
-    model = ViT_BiPhysFormer(
+    # Full MHSA attention (PhysFormer 원본). BiFormer 미적용.
+    model = ViT_ST_ST_Compact3_TDC_gra_sharp(
         patches=(4, 4, 4), dim=96, ff_dim=144, num_heads=4, num_layers=12,
         dropout_rate=0.1, theta=0.7, image_size=(160, 128, 128),
-        n_win=(2, 2, 2), topk=4,
     ).to(device)
 
     # rPPG-Toolbox PhysFormerTrainer 는 PE pretraining 사용 안 함 (from scratch).
@@ -358,18 +352,22 @@ def run_experiment(train_name, train_path, test_name, test_path):
             pooled = float(np.corrcoef(preds.flatten(), gts.flatten())[0, 1])
             per_clip = per_clip_pearson(preds, gts)
             # rPPG-Toolbox 호환 per-subject 평가 (paper 수치 비교용)
+            #   - DiffNormalized 는 cumsum + detrend + Butterworth 후 periodogram
+            #   - Subject 별 clip concat → 60s 신호로 HR 추정
             subj_metrics = evaluate_per_subject(
                 preds, gts, loader.dataset.samples,
-                fs=FPS, diff_flag=True,
-                low_pass=0.75, high_pass=2.5,
+                fs=FPS, diff_flag=True,  # DiffNormalized
+                low_pass=0.75, high_pass=2.5,  # paper-level
             )
             return {
+                # per-subject (paper 비교 가능)
                 'MAE_bpm': subj_metrics['MAE_bpm'],
                 'RMSE_bpm': subj_metrics['RMSE_bpm'],
                 'MAPE_pct': subj_metrics['MAPE_pct'],
                 'Pearson': subj_metrics['Pearson'],
                 'signal_Pearson': subj_metrics['signal_Pearson_mean'],
                 'n_subjects': subj_metrics['n_subjects'],
+                # per-clip (이전 방식, 참고용)
                 'Pearson_pooled': pooled, 'Pearson_per_clip': per_clip,
                 'MAE_sample': mae_s, 'RMSE_sample': rmse_s,
             }, preds, gts
@@ -377,18 +375,18 @@ def run_experiment(train_name, train_path, test_name, test_path):
         valid_metrics, valid_preds, valid_gts = evaluate(valid_loader, 'Validation')
         test_metrics, test_preds, test_gts = evaluate(test_loader, 'Test')
 
-        # Waveform visualization: reuse preds from evaluate
+        # Waveform visualization: REUSE preds from evaluate (no redundant inference)
         viz_dir = os.path.join(RESULT_DIR, 'waveforms', f'epoch_{epoch+1}')
         os.makedirs(viz_dir, exist_ok=True)
         safe_label = label.replace(' -> ', '_to_').replace(' ', '').replace(':', '_')
         try:
-            from src.evaluation import get_subject_signals
             for loader, name, p_arr, g_arr in [
                 (valid_loader, 'VALID', valid_preds, valid_gts),
                 (test_loader, 'TEST', test_preds, test_gts),
             ]:
                 sigs = get_subject_signals(p_arr, g_arr, loader.dataset.samples,
-                                           fs=FPS, diff_flag=True, low_pass=0.75, high_pass=2.5)
+                                           fs=FPS, diff_flag=True,
+                                           low_pass=0.75, high_pass=2.5)
                 save_waveform_plot(
                     sigs, os.path.join(viz_dir, f'{name}_{safe_label}.png'),
                     fs=FPS, n_max=4, title=f"{label} {name} epoch {epoch+1}",
@@ -397,7 +395,7 @@ def run_experiment(train_name, train_path, test_name, test_path):
         except Exception as e:
             log(f"  [!] waveform viz failed: {e}")
 
-        # Save checkpoint
+        # Save checkpoint (so we can re-generate waveforms / analyze later)
         ckpt_dir = os.path.join(RESULT_DIR, 'checkpoints')
         os.makedirs(ckpt_dir, exist_ok=True)
         ckpt_path = os.path.join(ckpt_dir, f'{safe_label}_epoch{epoch+1}.pt')
@@ -441,7 +439,7 @@ def main():
     _state['started_at'] = datetime.now()
     _seed_everything(SEED)
     log(f"[*] Seed fixed to {SEED}")
-    log(f"[*] BiPhysFormer (PhysFormer official + BiLevel Routing Attention)")
+    log(f"[*] PhysFormer baseline (full MHSA, no BiFormer) — rPPG-Toolbox aligned")
     logger = threading.Thread(target=_progress_loop, daemon=True)
     logger.start()
 
@@ -458,7 +456,7 @@ def main():
             })
 
         log("\n" + "=" * 70)
-        log("[*] 종합 결과 — BiPhysFormer (ANN, BiFormer)")
+        log("[*] 종합 결과 — PhysFormer baseline (no BiFormer)")
         log("=" * 70)
         for r in all_results:
             b = r['best']

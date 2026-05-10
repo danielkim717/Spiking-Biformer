@@ -30,8 +30,14 @@ class RPPGDataset(Dataset):
                  face_detection_backend='HC', larger_box_coef=1.5,
                  dynamic_detection_freq=0, data_type='standardized',
                  split_range=None, random_hflip=False,
+                 chunk_step=None, hr_filter=False, fps=30,
                  # legacy aliases for backwards compatibility
                  dynamic_detection=None, standardize_input=None):
+        """
+        chunk_step: 클립 시작 frame 사이 간격. None이면 clip_len (non-overlapping).
+                    e.g., chunk_step=20 → 매 20 frame 마다 새 클립 (sliding window for eval).
+        hr_filter: True 시 ground-truth HR이 [40, 180] BPM 벗어나는 클립 제외 (PhysBench/rPPG-Toolbox 트릭).
+        """
         """split_range: (begin, end) ∈ [0, 1] tuple. subject 정렬 후 해당 비율 구간만 사용.
         rPPG-Toolbox `BEGIN`/`END` 와 동일 — 0.0-0.8 train, 0.8-1.0 valid 표준.
         """
@@ -49,6 +55,9 @@ class RPPGDataset(Dataset):
         self.data_type = data_type
         # PhysFormer 공식 augmentation (Loadtemporal_data.py RandomHorizontalFlip)
         self.random_hflip = random_hflip
+        self.chunk_step = chunk_step if chunk_step is not None else clip_len
+        self.hr_filter = hr_filter
+        self.fps = fps
         # Backwards compat: dynamic_detection=True (legacy bool) -> 30
         if dynamic_detection is True and dynamic_detection_freq == 0:
             dynamic_detection_freq = 30
@@ -72,6 +81,9 @@ class RPPGDataset(Dataset):
         else:
             self._haar = None
         self._prepare_data()
+        # Drop unpicklable cv2.CascadeClassifier so DataLoader workers (Windows spawn)
+        # can pickle this dataset. Face detection already cached in self._face_box_cache.
+        self._haar = None
 
     def _detect_face_box_raw(self, img):
         H, W = img.shape[:2]
@@ -159,7 +171,7 @@ class RPPGDataset(Dataset):
                     img_files = img_files[:min_len]
                     self._video_img_list[subj] = img_files
 
-                    for i in range(0, min_len - need_count + 1, self.clip_len):
+                    for i in range(0, min_len - need_count + 1, self.chunk_step):
                         self.samples.append({
                             'video_id': subj,
                             'first_frame_idx': i,
@@ -212,7 +224,7 @@ class RPPGDataset(Dataset):
                         frame_count = len(all_imgs)
 
                         min_len = min(len(bvp_data), frame_count)
-                        for i in range(0, min_len - need_count + 1, self.clip_len):
+                        for i in range(0, min_len - need_count + 1, self.chunk_step):
                             self.samples.append({
                                 'video_id': subj,
                                 'frames_dir': frames_dir,
@@ -221,7 +233,30 @@ class RPPGDataset(Dataset):
                                 'bvp': bvp_data[i:i + need_count]
                             })
 
-        print(f"[Dataset] {self.dataset_name} 샘플 생성 완료: 총 {len(self.samples)} 클립")
+        print(f"[Dataset] {self.dataset_name} 샘플 생성 완료: 총 {len(self.samples)} 클립 (chunk_step={self.chunk_step})")
+
+        # HR validity filter (PhysBench/rPPG-Toolbox trick: 40 < HR < 180 BPM 만 유지)
+        if self.hr_filter:
+            from scipy.signal import welch
+            def _get_hr(y):
+                y = np.asarray(y, dtype=np.float64)
+                if np.std(y) < 1e-9: return 0.0
+                p, q = welch(y, self.fps, nfft=int(1e5 / self.fps),
+                             nperseg=int(min(len(y) - 1, 256)))
+                mask = (p > 30 / 60) & (p < 180 / 60)
+                if not mask.any(): return 0.0
+                return float(p[mask][np.argmax(q[mask])] * 60)
+            n_before = len(self.samples)
+            kept = []
+            for s in self.samples:
+                # diff_normalized 면 raw bvp(N+1) 받음, label은 diff(N), 우리는 raw bvp 로 HR 추정
+                bvp_arr = np.asarray(s['bvp'], dtype=np.float64)
+                hr = _get_hr(bvp_arr)
+                if 40 < hr < 180:
+                    kept.append(s)
+            self.samples = kept
+            print(f"[Dataset] HR filter (40<HR<180): {n_before} → {len(self.samples)} clips "
+                  f"({100 * len(self.samples) / max(1, n_before):.1f}% 유지)")
 
         if self.face_crop and self.face_detection_backend == 'HC':
             self._predetect_faces()
@@ -348,6 +383,8 @@ def get_dataloader(dataset_name, root_dir, batch_size=2, clip_len=30, img_size=1
                    face_detection_backend='HC', larger_box_coef=1.5,
                    dynamic_detection_freq=0, data_type='standardized',
                    split_range=None, random_hflip=False,
+                   chunk_step=None, hr_filter=False, fps=30,
+                   num_workers=4, pin_memory=True,
                    dynamic_detection=None, standardize_input=None,
                    drop_last=None):
     dataset = RPPGDataset(dataset_name, root_dir, clip_len=clip_len, img_size=img_size,
@@ -358,11 +395,16 @@ def get_dataloader(dataset_name, root_dir, batch_size=2, clip_len=30, img_size=1
                           data_type=data_type,
                           split_range=split_range,
                           random_hflip=random_hflip,
+                          chunk_step=chunk_step,
+                          hr_filter=hr_filter,
+                          fps=fps,
                           dynamic_detection=dynamic_detection,
                           standardize_input=standardize_input)
     # 마지막 incomplete batch 가 SNN 내부 BN 통계 (track_running_stats=False) 를
     # 불안정하게 만들 수 있어 train 에서는 drop_last=True 권장.
     if drop_last is None:
         drop_last = bool(shuffle)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0,
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle,
+                      num_workers=num_workers, pin_memory=pin_memory,
+                      persistent_workers=(num_workers > 0),
                       drop_last=drop_last)
