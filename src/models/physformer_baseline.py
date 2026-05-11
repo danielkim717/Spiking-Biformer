@@ -1,15 +1,13 @@
-"""
-PhysFormer (Yu et al., CVPR 2022) — 공식 GitHub 코드의 직접 포팅.
+﻿"""
+PhysFormer (Yu et al., CVPR 2022) ??怨듭떇 GitHub 肄붾뱶??吏곸젒 ?ы똿.
 
-원본:
+?먮낯:
   https://github.com/ZitongYu/PhysFormer/blob/main/model/transformer_layer.py
   https://github.com/ZitongYu/PhysFormer/blob/main/model/physformer.py
 
-용도:
-  1) PE block (Stem0+Stem1+Stem2 + patch_embedding) 사전학습용
-  2) BiPhysFormer (BiFormer 적용) 와의 fair baseline 비교용
-
-원본 대비 차이는 import 와 type-hint 정리뿐. 모델 구조/init/forward 는 동일.
+?⑸룄:
+  1) PE block (Stem0+Stem1+Stem2 + patch_embedding) ?ъ쟾?숈뒿??  2) BiPhysFormer (BiFormer ?곸슜) ???fair baseline 鍮꾧탳??
+?먮낯 ?鍮?李⑥씠??import ? type-hint ?뺣━肉? 紐⑤뜽 援ъ“/init/forward ???숈씪.
 """
 import math
 from typing import Optional
@@ -20,8 +18,7 @@ import torch.nn.functional as F
 
 
 # =============================================================================
-# CDC_T — 공식 코드 그대로
-# =============================================================================
+# CDC_T ??怨듭떇 肄붾뱶 洹몃?濡?# =============================================================================
 class CDC_T(nn.Module):
     """Temporal Center-difference based 3D Convolution."""
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1,
@@ -62,19 +59,18 @@ def merge_last(x, n_dims):
 
 
 # =============================================================================
-# MultiHeadedSelfAttention_TDC_gra_sharp — 공식 코드 그대로
-# =============================================================================
+# MultiHeadedSelfAttention_TDC_gra_sharp ??怨듭떇 肄붾뱶 洹몃?濡?# =============================================================================
 class MultiHeadedSelfAttention_TDC_gra_sharp(nn.Module):
     """Multi-Headed Dot Product Attention with depth-wise Conv3d (PhysFormer)."""
     def __init__(self, dim, num_heads, dropout, theta):
         super().__init__()
         self.proj_q = nn.Sequential(
             CDC_T(dim, dim, 3, stride=1, padding=1, groups=1, bias=False, theta=theta),
-            nn.BatchNorm3d(dim),
+            nn.BatchNorm3d(dim, track_running_stats=False),
         )
         self.proj_k = nn.Sequential(
             CDC_T(dim, dim, 3, stride=1, padding=1, groups=1, bias=False, theta=theta),
-            nn.BatchNorm3d(dim),
+            nn.BatchNorm3d(dim, track_running_stats=False),
         )
         self.proj_v = nn.Sequential(
             nn.Conv3d(dim, dim, 1, stride=1, padding=0, groups=1, bias=False),
@@ -100,24 +96,23 @@ class MultiHeadedSelfAttention_TDC_gra_sharp(nn.Module):
 
 
 # =============================================================================
-# PositionWiseFeedForward_ST — 공식 코드 그대로
-# =============================================================================
+# PositionWiseFeedForward_ST ??怨듭떇 肄붾뱶 洹몃?濡?# =============================================================================
 class PositionWiseFeedForward_ST(nn.Module):
     def __init__(self, dim, ff_dim):
         super().__init__()
         self.fc1 = nn.Sequential(
             nn.Conv3d(dim, ff_dim, 1, stride=1, padding=0, bias=False),
-            nn.BatchNorm3d(ff_dim),
+            nn.BatchNorm3d(ff_dim, track_running_stats=False),
             nn.ELU(),
         )
         self.STConv = nn.Sequential(
             nn.Conv3d(ff_dim, ff_dim, 3, stride=1, padding=1, groups=ff_dim, bias=False),
-            nn.BatchNorm3d(ff_dim),
+            nn.BatchNorm3d(ff_dim, track_running_stats=False),
             nn.ELU(),
         )
         self.fc2 = nn.Sequential(
             nn.Conv3d(ff_dim, dim, 1, stride=1, padding=0, bias=False),
-            nn.BatchNorm3d(dim),
+            nn.BatchNorm3d(dim, track_running_stats=False),
         )
 
     def forward(self, x):
@@ -131,8 +126,7 @@ class PositionWiseFeedForward_ST(nn.Module):
 
 
 # =============================================================================
-# Block_ST_TDC_gra_sharp — 공식 코드 그대로
-# =============================================================================
+# Block_ST_TDC_gra_sharp ??怨듭떇 肄붾뱶 洹몃?濡?# =============================================================================
 class Block_ST_TDC_gra_sharp(nn.Module):
     def __init__(self, dim, num_heads, ff_dim, dropout, theta):
         super().__init__()
@@ -167,14 +161,13 @@ class Transformer_ST_TDC_gra_sharp(nn.Module):
 
 
 # =============================================================================
-# ViT_ST_ST_Compact3_TDC_gra_sharp — 공식 코드 그대로
-# =============================================================================
+# ViT_ST_ST_Compact3_TDC_gra_sharp ??怨듭떇 肄붾뱶 洹몃?濡?# =============================================================================
 def _as_tuple(x):
     return x if isinstance(x, tuple) else (x, x, x)
 
 
 class ViT_ST_ST_Compact3_TDC_gra_sharp(nn.Module):
-    """PhysFormer 공식 모델 (CVPR 2022)."""
+    """PhysFormer 怨듭떇 紐⑤뜽 (CVPR 2022)."""
 
     def __init__(
         self,
@@ -212,19 +205,19 @@ class ViT_ST_ST_Compact3_TDC_gra_sharp(nn.Module):
 
         self.Stem0 = nn.Sequential(
             nn.Conv3d(3, dim // 4, [1, 5, 5], stride=1, padding=[0, 2, 2]),
-            nn.BatchNorm3d(dim // 4),
+            nn.BatchNorm3d(dim // 4, track_running_stats=False),
             nn.ReLU(inplace=True),
             nn.MaxPool3d((1, 2, 2), stride=(1, 2, 2)),
         )
         self.Stem1 = nn.Sequential(
             nn.Conv3d(dim // 4, dim // 2, [3, 3, 3], stride=1, padding=1),
-            nn.BatchNorm3d(dim // 2),
+            nn.BatchNorm3d(dim // 2, track_running_stats=False),
             nn.ReLU(inplace=True),
             nn.MaxPool3d((1, 2, 2), stride=(1, 2, 2)),
         )
         self.Stem2 = nn.Sequential(
             nn.Conv3d(dim // 2, dim, [3, 3, 3], stride=1, padding=1),
-            nn.BatchNorm3d(dim),
+            nn.BatchNorm3d(dim, track_running_stats=False),
             nn.ReLU(inplace=True),
             nn.MaxPool3d((1, 2, 2), stride=(1, 2, 2)),
         )
@@ -232,13 +225,13 @@ class ViT_ST_ST_Compact3_TDC_gra_sharp(nn.Module):
         self.upsample = nn.Sequential(
             nn.Upsample(scale_factor=(2, 1, 1)),
             nn.Conv3d(dim, dim, [3, 1, 1], stride=1, padding=(1, 0, 0)),
-            nn.BatchNorm3d(dim),
+            nn.BatchNorm3d(dim, track_running_stats=False),
             nn.ELU(),
         )
         self.upsample2 = nn.Sequential(
             nn.Upsample(scale_factor=(2, 1, 1)),
             nn.Conv3d(dim, dim // 2, [3, 1, 1], stride=1, padding=(1, 0, 0)),
-            nn.BatchNorm3d(dim // 2),
+            nn.BatchNorm3d(dim // 2, track_running_stats=False),
             nn.ELU(),
         )
         self.ConvBlockLast = nn.Conv1d(dim // 2, 1, 1, stride=1, padding=0)
@@ -275,7 +268,7 @@ class ViT_ST_ST_Compact3_TDC_gra_sharp(nn.Module):
         return rPPG, S1, S2, S3
 
     def export_pe_state_dict(self):
-        """Stem0/1/2 + patch_embedding state_dict (PE pretraining 용)."""
+        """Stem0/1/2 + patch_embedding state_dict (PE pretraining ??."""
         sd = {}
         for prefix in ['Stem0', 'Stem1', 'Stem2', 'patch_embedding']:
             module = getattr(self, prefix)

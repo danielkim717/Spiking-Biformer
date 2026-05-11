@@ -106,7 +106,7 @@ def get_hr_welch(y, sr=30, hr_min=30, hr_max=180):
 
 # rPPG-Toolbox PhysFormerTrainer 셋업 그대로 (paper MAE 1.44 / 12.92 를 만든 셋업)
 # https://github.com/ubicomplab/rPPG-Toolbox/blob/main/neural_methods/trainer/PhysFormerTrainer.py
-EPOCHS = 30                # PhysFormer paper 학습량. rPPG-Toolbox config 는 10ep 이지만, paper-level 성능 도달을 위해 30ep 사용.
+EPOCHS = 10                # BN=False ablation: 10 epoch (Spiking-Biformer 와 동일)
                            # epoch>10 부터 a=0.05, b=5.0 분기 발동 (rPPG-Toolbox schedule)
 BATCH_SIZE = 4
 LR = 1e-4
