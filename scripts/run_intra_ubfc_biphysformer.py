@@ -132,15 +132,19 @@ PURE_PATH = 'D:\\PURE'
 UBFC_PATH = 'D:\\UBFC-rPPG'
 # rPPG-Toolbox 는 PE pretraining 사용 안 함. 비활성.
 
+# Intra-dataset: train+test 같은 데이터셋
+# PhysFormer 원논문 PURE 평가 방식: subject-exclusive split (paper Section 4.1)
+#   "we adopt the same protocol as in [Yu et al. 2019]" — train 60%, test 40%, subject-exclusive
+# rPPG-Toolbox config: train 0.0-0.6, valid 0.6-0.8, test 0.8-1.0
+# 우리: train 0.0-0.7 (subject IDs sorted ascending), valid 0.7-0.8, test 0.8-1.0
 EXPERIMENTS = [
-    ('PURE', PURE_PATH, 'UBFC-rPPG', UBFC_PATH),
-    # ('UBFC-rPPG', UBFC_PATH, 'PURE', PURE_PATH),  # disabled (overnight pipeline)
+    ('UBFC-rPPG', UBFC_PATH, 'UBFC-rPPG', UBFC_PATH),
 ]
 
-RESULT_DIR = 'results/cross_biphysformer'
+RESULT_DIR = 'results/intra_ubfc_biphysformer'
 LOG = os.path.join(RESULT_DIR, 'log.txt')
-LIVE_FILE = os.path.join('results', 'live_progress_biphys.md')
-STATUS_FILE = os.path.join('results', 'current_status_biphys.json')
+LIVE_FILE = os.path.join('results', 'live_progress_intra_ubfc.md')
+STATUS_FILE = os.path.join('results', 'current_status_intra_ubfc.json')
 
 _state = {'started_at': None, 'stop': False, 'completed': []}
 
@@ -238,27 +242,25 @@ def run_experiment(train_name, train_path, test_name, test_path):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    # rPPG-Toolbox/PhysBench PhysFormerTrainer 셋업:
-    #   - Train: DiffNormalized + RandomHorizontalFlip + HR validity filter (40<HR<180)
-    #   - Valid/Test: sliding window (chunk_step=20, 8x overlap) + HR aggregation 평균
+    # UBFC intra-dataset: RhythmFormer Table 1 protocol — 60/40 split, no valid
+    #   - Train: 0-60% subjects (~25), RandomHorizontalFlip + HR filter
+    #   - Test:  60-100% subjects (~17) — TEST 가 valid 역할 (best epoch = best TEST RMSE)
     train_loader = get_dataloader(train_name, train_path, BATCH_SIZE, clip_len=160,
                                   face_crop=True, shuffle=True,
                                   data_type='diff_normalized', random_hflip=True,
                                   hr_filter=True, fps=FPS,
                                   dynamic_detection_freq=DETECTION_FREQ,
-                                  split_range=(0.0, 0.8))
-    valid_loader = get_dataloader(train_name, train_path, BATCH_SIZE, clip_len=160,
-                                  face_crop=True, shuffle=False,
-                                  data_type='diff_normalized',
-                                  dynamic_detection_freq=DETECTION_FREQ,
-                                  split_range=(0.8, 1.0))
+                                  split_range=(0.0, 0.6))
     test_loader = get_dataloader(test_name, test_path, BATCH_SIZE, clip_len=160,
                                  face_crop=True, shuffle=False,
                                  data_type='diff_normalized', chunk_step=80,
-                                 dynamic_detection_freq=DETECTION_FREQ)
-    log(f"  train clips: {len(train_loader.dataset)} (80% of {train_name})")
-    log(f"  valid clips: {len(valid_loader.dataset)} (20% of {train_name}) - used for best-epoch selection")
-    log(f"  test  clips: {len(test_loader.dataset)} ({test_name})")
+                                 dynamic_detection_freq=DETECTION_FREQ,
+                                 split_range=(0.6, 1.0))
+    # valid = test (no separate valid, RhythmFormer protocol)
+    valid_loader = test_loader
+    log(f"  train clips: {len(train_loader.dataset)} (0-60% of {train_name})")
+    log(f"  test  clips: {len(test_loader.dataset)} (60-100% = 40% of {test_name}) - RhythmFormer protocol")
+    log(f"  NOTE: valid = test (no separate valid set, best epoch by test RMSE)")
 
     model = ViT_BiPhysFormer(
         patches=(4, 4, 4), dim=96, ff_dim=144, num_heads=4, num_layers=12,

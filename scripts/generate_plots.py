@@ -27,44 +27,50 @@ from src.evaluation import get_subject_signals
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--direction', type=str, required=True,
-                        choices=['PURE_to_UBFC-rPPG', 'UBFC-rPPG_to_PURE'])
-    parser.add_argument('--epoch', type=int, required=True)
+    parser.add_argument('--ckpt', type=str, required=True,
+                        help='Path to checkpoint .pt file')
+    parser.add_argument('--test_dataset', type=str, required=True,
+                        choices=['PURE', 'UBFC-rPPG'])
+    parser.add_argument('--test_path', type=str, default=None,
+                        help='Override test path (default: D:\\PURE or D:\\UBFC-rPPG)')
+    parser.add_argument('--split_range', type=str, default=None,
+                        help='e.g. "0.6,1.0" for intra-dataset test set; omit for cross-dataset')
+    parser.add_argument('--name', type=str, required=True,
+                        help='Plot filename prefix (e.g. intra_PURE_epoch9)')
     parser.add_argument('--out_dir', type=str, default='results/plots/biphysformer')
     args = parser.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    # Load checkpoint
-    ckpt = f'results/cross_biphysformer/checkpoints/{args.direction}_epoch{args.epoch}.pt'
-    print(f'Loading {ckpt}')
-
+    print(f'Loading {args.ckpt}')
     model = ViT_BiPhysFormer(
         patches=(4, 4, 4), dim=96, ff_dim=144, num_heads=4, num_layers=12,
         dropout_rate=0.1, theta=0.7, image_size=(160, 128, 128),
         n_win=(2, 2, 2), topk=4,
     ).to(device)
-    state = torch.load(ckpt, map_location=device, weights_only=True)
+    state = torch.load(args.ckpt, map_location=device, weights_only=True)
     missing, unexpected = model.load_state_dict(state, strict=False)
     if missing:
-        print(f'  [info] {len(missing)} missing keys (running stats may be reinitialized)')
+        print(f'  [info] {len(missing)} missing keys')
     if unexpected:
         print(f'  [warning] {len(unexpected)} unexpected keys ignored')
     model.eval()
-    print(f'  Params: {sum(p.numel() for p in model.parameters())}')
 
-    # Determine test dataset
-    if args.direction == 'PURE_to_UBFC-rPPG':
-        test_name, test_path = 'UBFC-rPPG', 'D:\\UBFC-rPPG'
-    else:
-        test_name, test_path = 'PURE', 'D:\\PURE'
-
-    print(f'Loading test loader: {test_name}')
+    # Test dataset
+    test_path = args.test_path
+    if test_path is None:
+        test_path = 'D:\\PURE' if args.test_dataset == 'PURE' else 'D:\\UBFC-rPPG'
+    split_range = None
+    if args.split_range:
+        a, b = args.split_range.split(',')
+        split_range = (float(a), float(b))
+    print(f'Test: {args.test_dataset} at {test_path}, split={split_range}')
     test_loader = get_dataloader(
-        test_name, test_path, batch_size=4, clip_len=160,
+        args.test_dataset, test_path, batch_size=4, clip_len=160,
         face_crop=True, shuffle=False, data_type='diff_normalized',
         chunk_step=80, dynamic_detection_freq=0, num_workers=4, pin_memory=True,
+        split_range=split_range,
     )
     print(f'  Test clips: {len(test_loader.dataset)}')
 
@@ -111,13 +117,13 @@ def main():
     ax.set_ylim(lim_min, lim_max)
     ax.set_xlabel('Ground Truth HR (BPM)', fontsize=12)
     ax.set_ylabel('Predicted HR (BPM)', fontsize=12)
-    ax.set_title(f'BiPhysFormer — {args.direction.replace("_to_", " → ")} (epoch {args.epoch})\n'
+    ax.set_title(f'BiPhysFormer — {args.name}\n'
                  f'MAE={mae:.2f}, RMSE={rmse:.2f}, MAPE={mape:.2f}%, ρ={pearson:.3f}',
                  fontsize=11)
     ax.grid(alpha=0.3)
     ax.legend()
     ax.set_aspect('equal')
-    scatter_path = os.path.join(args.out_dir, f'scatter_{args.direction}_epoch{args.epoch}.png')
+    scatter_path = os.path.join(args.out_dir, f'scatter_{args.name}.png')
     fig.tight_layout()
     fig.savefig(scatter_path, dpi=120)
     plt.close(fig)
@@ -142,19 +148,19 @@ def main():
     ax.axhline(0, color='gray', linestyle=':', linewidth=0.8)
     ax.set_xlabel('(GT + Pred) / 2 — Mean HR (BPM)', fontsize=12)
     ax.set_ylabel('Pred − GT — Difference (BPM)', fontsize=12)
-    ax.set_title(f'Bland-Altman — {args.direction.replace("_to_", " → ")} (epoch {args.epoch})\n'
+    ax.set_title(f'Bland-Altman — {args.name}\n'
                  f'Bias = {mean_diff:.2f} BPM, LoA = [{loa_lower:.2f}, {loa_upper:.2f}] BPM',
                  fontsize=11)
     ax.grid(alpha=0.3)
     ax.legend(loc='best', fontsize=10)
-    ba_path = os.path.join(args.out_dir, f'bland_altman_{args.direction}_epoch{args.epoch}.png')
+    ba_path = os.path.join(args.out_dir, f'bland_altman_{args.name}.png')
     fig.tight_layout()
     fig.savefig(ba_path, dpi=120)
     plt.close(fig)
     print(f'  Saved Bland-Altman: {ba_path}')
 
     # 3. Save per-subject CSV for transparency
-    csv_path = os.path.join(args.out_dir, f'per_subject_{args.direction}_epoch{args.epoch}.csv')
+    csv_path = os.path.join(args.out_dir, f'per_subject_{args.name}.csv')
     with open(csv_path, 'w', encoding='utf-8') as f:
         f.write('subject,gt_hr,pred_hr,error\n')
         for vid, p, g in zip(subjects, pred_hrs, gt_hrs):

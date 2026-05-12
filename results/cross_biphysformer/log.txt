@@ -14,393 +14,104 @@
   grad_clip: max_norm=1.0
   output norm: rPPG = (rPPG - mean(axis=-1)) / std(axis=-1)  [per-sample, rPPG-Toolbox]
   data: DiffNormalized input/label, static face detection, no augmentation
-  EPOCHS: 30  (PhysFormer paper, 30ep)  schedule: epoch<=10 -> a=1.0,b=1.0; epoch>10 -> a=0.05,b=5.0
+  EPOCHS: 10  (PhysFormer paper, 30ep)  schedule: epoch<=10 -> a=1.0,b=1.0; epoch>10 -> a=0.05,b=5.0
 
-[*] Epoch 1/30  alpha=1.0, beta=1.0000
+[*] Epoch 1/10  alpha=1.0, beta=1.0000
   current_lr: 1.00e-04
   waveforms saved → results/cross_biphysformer\waveforms\epoch_1
 
-Epoch 1/30: Train avg loss 9.3905
-  VALID  HR MAE 14.795 BPM  RMSE 19.336 BPM  Pearson(HR) 0.5937  signal_pearson 0.1519  (n_subjects=12)
-  TEST   HR MAE 27.162 BPM  RMSE 32.335 BPM  Pearson(HR) 0.0928  signal_pearson 0.0456  MAPE 25.33%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.0782  TEST Pearson_per_clip 0.0135
+Epoch 1/10: Train avg loss 9.3905
+  VALID  HR MAE 14.502 BPM  RMSE 20.764 BPM  Pearson(HR) 0.3900  signal_pearson 0.2197  (n_subjects=12)
+  TEST   HR MAE 23.919 BPM  RMSE 30.982 BPM  Pearson(HR) 0.0604  signal_pearson 0.0006  MAPE 22.02%  (n_subjects=42)
+  [per-clip ref] VALID Pearson_per_clip 0.1116  TEST Pearson_per_clip -0.0220
 
-[*] Epoch 2/30  alpha=1.0, beta=1.0000
+[*] Epoch 2/10  alpha=1.0, beta=1.0000
   current_lr: 1.00e-04
   waveforms saved → results/cross_biphysformer\waveforms\epoch_2
 
-Epoch 2/30: Train avg loss 9.2258
-  VALID  HR MAE 1.538 BPM  RMSE 2.831 BPM  Pearson(HR) 0.9911  signal_pearson 0.3682  (n_subjects=12)
-  TEST   HR MAE 7.115 BPM  RMSE 17.380 BPM  Pearson(HR) 0.5806  signal_pearson -0.0699  MAPE 6.38%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.2132  TEST Pearson_per_clip -0.0777
+Epoch 2/10: Train avg loss 9.2278
+  VALID  HR MAE 6.921 BPM  RMSE 12.933 BPM  Pearson(HR) 0.7429  signal_pearson 0.3076  (n_subjects=12)
+  TEST   HR MAE 10.191 BPM  RMSE 21.264 BPM  Pearson(HR) 0.4599  signal_pearson -0.0783  MAPE 9.05%  (n_subjects=42)
+  [per-clip ref] VALID Pearson_per_clip 0.1662  TEST Pearson_per_clip -0.0838
 
-[*] Epoch 3/30  alpha=1.0, beta=1.0000
+[*] Epoch 3/10  alpha=1.0, beta=1.0000
   current_lr: 1.00e-04
   waveforms saved → results/cross_biphysformer\waveforms\epoch_3
 
-Epoch 3/30: Train avg loss 9.1780
-  VALID  HR MAE 1.831 BPM  RMSE 3.092 BPM  Pearson(HR) 0.9892  signal_pearson 0.3202  (n_subjects=12)
-  TEST   HR MAE 18.624 BPM  RMSE 28.554 BPM  Pearson(HR) 0.0834  signal_pearson -0.1743  MAPE 16.48%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1781  TEST Pearson_per_clip -0.1269
+Epoch 3/10: Train avg loss 9.1735
+  VALID  HR MAE 1.465 BPM  RMSE 2.703 BPM  Pearson(HR) 0.9917  signal_pearson 0.3473  (n_subjects=12)
+  TEST   HR MAE 11.468 BPM  RMSE 20.534 BPM  Pearson(HR) 0.4592  signal_pearson -0.2011  MAPE 10.31%  (n_subjects=42)
+  [per-clip ref] VALID Pearson_per_clip 0.1969  TEST Pearson_per_clip -0.1554
 
-[*] Epoch 4/30  alpha=1.0, beta=1.0000
+[*] Epoch 4/10  alpha=1.0, beta=1.0000
   current_lr: 1.00e-04
   waveforms saved → results/cross_biphysformer\waveforms\epoch_4
 
-Epoch 4/30: Train avg loss 9.1259
-  VALID  HR MAE 1.538 BPM  RMSE 2.831 BPM  Pearson(HR) 0.9911  signal_pearson 0.3797  (n_subjects=12)
-  TEST   HR MAE 5.818 BPM  RMSE 16.344 BPM  Pearson(HR) 0.6318  signal_pearson -0.0966  MAPE 5.19%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.2111  TEST Pearson_per_clip -0.1175
+Epoch 4/10: Train avg loss 9.1272
+  VALID  HR MAE 1.465 BPM  RMSE 2.703 BPM  Pearson(HR) 0.9917  signal_pearson 0.3757  (n_subjects=12)
+  TEST   HR MAE 7.157 BPM  RMSE 16.915 BPM  Pearson(HR) 0.6089  signal_pearson -0.0616  MAPE 6.40%  (n_subjects=42)
+  [per-clip ref] VALID Pearson_per_clip 0.2075  TEST Pearson_per_clip -0.0956
 
-[*] Epoch 5/30  alpha=1.0, beta=1.0000
+[*] Epoch 5/10  alpha=1.0, beta=1.0000
   current_lr: 1.00e-04
   waveforms saved → results/cross_biphysformer\waveforms\epoch_5
 
-Epoch 5/30: Train avg loss 9.0215
-  VALID  HR MAE 2.417 BPM  RMSE 4.354 BPM  Pearson(HR) 0.9692  signal_pearson 0.3552  (n_subjects=12)
-  TEST   HR MAE 9.710 BPM  RMSE 20.429 BPM  Pearson(HR) 0.4604  signal_pearson -0.0774  MAPE 8.55%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1843  TEST Pearson_per_clip -0.0581
+Epoch 5/10: Train avg loss 9.0230
+  VALID  HR MAE 1.904 BPM  RMSE 2.997 BPM  Pearson(HR) 0.9881  signal_pearson 0.3094  (n_subjects=12)
+  TEST   HR MAE 13.707 BPM  RMSE 23.987 BPM  Pearson(HR) 0.2537  signal_pearson -0.0832  MAPE 12.16%  (n_subjects=42)
+  [per-clip ref] VALID Pearson_per_clip 0.1494  TEST Pearson_per_clip -0.0401
 
-[*] Epoch 6/30  alpha=1.0, beta=1.0000
+[*] Epoch 6/10  alpha=1.0, beta=1.0000
   current_lr: 1.00e-04
   waveforms saved → results/cross_biphysformer\waveforms\epoch_6
 
-Epoch 6/30: Train avg loss 8.9135
-  VALID  HR MAE 1.758 BPM  RMSE 2.975 BPM  Pearson(HR) 0.9898  signal_pearson 0.3385  (n_subjects=12)
-  TEST   HR MAE 14.188 BPM  RMSE 24.347 BPM  Pearson(HR) 0.2534  signal_pearson 0.0069  MAPE 12.53%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1793  TEST Pearson_per_clip -0.0104
+Epoch 6/10: Train avg loss 8.9051
+  VALID  HR MAE 1.758 BPM  RMSE 2.975 BPM  Pearson(HR) 0.9898  signal_pearson 0.3315  (n_subjects=12)
+  TEST   HR MAE 15.862 BPM  RMSE 26.059 BPM  Pearson(HR) 0.1872  signal_pearson 0.1230  MAPE 14.09%  (n_subjects=42)
+  [per-clip ref] VALID Pearson_per_clip 0.1653  TEST Pearson_per_clip 0.0582
 
-[*] Epoch 7/30  alpha=1.0, beta=1.0000
+[*] Epoch 7/10  alpha=1.0, beta=1.0000
   current_lr: 1.00e-04
   waveforms saved → results/cross_biphysformer\waveforms\epoch_7
 
-Epoch 7/30: Train avg loss 8.8008
-  VALID  HR MAE 1.282 BPM  RMSE 2.081 BPM  Pearson(HR) 0.9935  signal_pearson 0.3167  (n_subjects=12)
-  TEST   HR MAE 13.832 BPM  RMSE 23.542 BPM  Pearson(HR) 0.3816  signal_pearson -0.0702  MAPE 12.48%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1407  TEST Pearson_per_clip -0.0470
+Epoch 7/10: Train avg loss 8.7904
+  VALID  HR MAE 3.296 BPM  RMSE 8.141 BPM  Pearson(HR) 0.8778  signal_pearson 0.2855  (n_subjects=12)
+  TEST   HR MAE 16.595 BPM  RMSE 24.282 BPM  Pearson(HR) 0.3298  signal_pearson 0.0009  MAPE 14.72%  (n_subjects=42)
+  [per-clip ref] VALID Pearson_per_clip 0.1255  TEST Pearson_per_clip -0.0015
 
-[*] Epoch 8/30  alpha=1.0, beta=1.0000
+[*] Epoch 8/10  alpha=1.0, beta=1.0000
   current_lr: 1.00e-04
   waveforms saved → results/cross_biphysformer\waveforms\epoch_8
 
-Epoch 8/30: Train avg loss 8.7182
-  VALID  HR MAE 8.679 BPM  RMSE 16.035 BPM  Pearson(HR) 0.5365  signal_pearson 0.2743  (n_subjects=12)
-  TEST   HR MAE 17.850 BPM  RMSE 27.899 BPM  Pearson(HR) 0.2523  signal_pearson -0.0189  MAPE 16.07%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1125  TEST Pearson_per_clip -0.0235
+Epoch 8/10: Train avg loss 8.7150
+  VALID  HR MAE 3.186 BPM  RMSE 6.397 BPM  Pearson(HR) 0.9185  signal_pearson 0.2538  (n_subjects=12)
+  TEST   HR MAE 20.466 BPM  RMSE 29.372 BPM  Pearson(HR) 0.0948  signal_pearson -0.0658  MAPE 18.20%  (n_subjects=42)
+  [per-clip ref] VALID Pearson_per_clip 0.0997  TEST Pearson_per_clip -0.0457
 
-[*] Epoch 9/30  alpha=1.0, beta=1.0000
+[*] Epoch 9/10  alpha=1.0, beta=1.0000
   current_lr: 1.00e-04
   waveforms saved → results/cross_biphysformer\waveforms\epoch_9
 
-Epoch 9/30: Train avg loss 8.6507
-  VALID  HR MAE 2.893 BPM  RMSE 5.968 BPM  Pearson(HR) 0.9294  signal_pearson 0.3017  (n_subjects=12)
-  TEST   HR MAE 19.629 BPM  RMSE 29.784 BPM  Pearson(HR) 0.0920  signal_pearson -0.0325  MAPE 17.48%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1378  TEST Pearson_per_clip -0.0421
+Epoch 9/10: Train avg loss 8.6472
+  VALID  HR MAE 1.172 BPM  RMSE 1.924 BPM  Pearson(HR) 0.9949  signal_pearson 0.2903  (n_subjects=12)
+  TEST   HR MAE 18.938 BPM  RMSE 26.794 BPM  Pearson(HR) 0.1309  signal_pearson 0.0793  MAPE 16.86%  (n_subjects=42)
+  [per-clip ref] VALID Pearson_per_clip 0.1267  TEST Pearson_per_clip 0.0406
 
-[*] Epoch 10/30  alpha=1.0, beta=1.0000
+[*] Epoch 10/10  alpha=1.0, beta=1.0000
   current_lr: 1.00e-04
   waveforms saved → results/cross_biphysformer\waveforms\epoch_10
 
-Epoch 10/30: Train avg loss 8.6060
-  VALID  HR MAE 3.149 BPM  RMSE 6.820 BPM  Pearson(HR) 0.9226  signal_pearson 0.2977  (n_subjects=12)
-  TEST   HR MAE 20.822 BPM  RMSE 30.393 BPM  Pearson(HR) 0.0903  signal_pearson -0.0159  MAPE 18.70%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1368  TEST Pearson_per_clip -0.0151
+Epoch 10/10: Train avg loss 8.5972
+  VALID  HR MAE 1.611 BPM  RMSE 2.750 BPM  Pearson(HR) 0.9908  signal_pearson 0.2715  (n_subjects=12)
+  TEST   HR MAE 20.654 BPM  RMSE 29.810 BPM  Pearson(HR) -0.0178  signal_pearson 0.0553  MAPE 18.14%  (n_subjects=42)
+  [per-clip ref] VALID Pearson_per_clip 0.1117  TEST Pearson_per_clip 0.0119
 
-[*] Epoch 11/30  alpha=1.0, beta=1.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_11
-
-Epoch 11/30: Train avg loss 8.5775
-  VALID  HR MAE 1.318 BPM  RMSE 2.479 BPM  Pearson(HR) 0.9934  signal_pearson 0.2992  (n_subjects=12)
-  TEST   HR MAE 20.508 BPM  RMSE 30.901 BPM  Pearson(HR) 0.0936  signal_pearson 0.0330  MAPE 18.42%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1417  TEST Pearson_per_clip -0.0187
-
-[*] Epoch 12/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_12
-
-Epoch 12/30: Train avg loss 41.9674
-  VALID  HR MAE 3.589 BPM  RMSE 10.682 BPM  Pearson(HR) 0.7748  signal_pearson 0.3379  (n_subjects=12)
-  TEST   HR MAE 30.532 BPM  RMSE 38.745 BPM  Pearson(HR) -0.2007  signal_pearson -0.0323  MAPE 27.68%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1769  TEST Pearson_per_clip 0.0048
-
-[*] Epoch 13/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_13
-
-Epoch 13/30: Train avg loss 41.9221
-  VALID  HR MAE 3.223 BPM  RMSE 9.181 BPM  Pearson(HR) 0.8348  signal_pearson 0.3588  (n_subjects=12)
-  TEST   HR MAE 36.056 BPM  RMSE 41.905 BPM  Pearson(HR) -0.2055  signal_pearson -0.0916  MAPE 33.45%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1922  TEST Pearson_per_clip -0.0223
-
-[*] Epoch 14/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_14
-
-Epoch 14/30: Train avg loss 41.9012
-  VALID  HR MAE 1.025 BPM  RMSE 1.785 BPM  Pearson(HR) 0.9950  signal_pearson 0.3569  (n_subjects=12)
-  TEST   HR MAE 33.754 BPM  RMSE 41.534 BPM  Pearson(HR) -0.2629  signal_pearson -0.0903  MAPE 30.79%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1913  TEST Pearson_per_clip -0.0572
-
-[*] Epoch 15/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_15
-
-Epoch 15/30: Train avg loss 41.8695
-  VALID  HR MAE 4.285 BPM  RMSE 12.496 BPM  Pearson(HR) 0.6861  signal_pearson 0.3131  (n_subjects=12)
-  TEST   HR MAE 34.801 BPM  RMSE 42.137 BPM  Pearson(HR) -0.0941  signal_pearson -0.0655  MAPE 32.10%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1256  TEST Pearson_per_clip 0.0029
-
-[*] Epoch 16/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_16
-
-Epoch 16/30: Train avg loss 41.8568
-  VALID  HR MAE 0.879 BPM  RMSE 1.634 BPM  Pearson(HR) 0.9980  signal_pearson 0.3288  (n_subjects=12)
-  TEST   HR MAE 33.608 BPM  RMSE 42.573 BPM  Pearson(HR) -0.3757  signal_pearson -0.0494  MAPE 30.35%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1620  TEST Pearson_per_clip -0.0098
-
-[*] Epoch 17/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_17
-
-Epoch 17/30: Train avg loss 41.8427
-  VALID  HR MAE 1.831 BPM  RMSE 4.413 BPM  Pearson(HR) 0.9678  signal_pearson 0.3590  (n_subjects=12)
-  TEST   HR MAE 35.156 BPM  RMSE 43.681 BPM  Pearson(HR) -0.4319  signal_pearson -0.0699  MAPE 31.86%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1872  TEST Pearson_per_clip -0.0430
-
-[*] Epoch 18/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_18
-
-Epoch 18/30: Train avg loss 41.8315
-  VALID  HR MAE 1.392 BPM  RMSE 2.569 BPM  Pearson(HR) 0.9914  signal_pearson 0.3838  (n_subjects=12)
-  TEST   HR MAE 32.833 BPM  RMSE 40.316 BPM  Pearson(HR) -0.2084  signal_pearson -0.0670  MAPE 29.99%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.2084  TEST Pearson_per_clip -0.0405
-
-[*] Epoch 19/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_19
-
-Epoch 19/30: Train avg loss 41.8154
-  VALID  HR MAE 1.538 BPM  RMSE 2.762 BPM  Pearson(HR) 0.9913  signal_pearson 0.3649  (n_subjects=12)
-  TEST   HR MAE 33.712 BPM  RMSE 40.744 BPM  Pearson(HR) -0.2232  signal_pearson 0.0449  MAPE 30.98%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1828  TEST Pearson_per_clip 0.0194
-
-[*] Epoch 20/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_20
-
-Epoch 20/30: Train avg loss 41.8103
-  VALID  HR MAE 1.465 BPM  RMSE 2.556 BPM  Pearson(HR) 0.9929  signal_pearson 0.3524  (n_subjects=12)
-  TEST   HR MAE 33.378 BPM  RMSE 41.132 BPM  Pearson(HR) -0.2479  signal_pearson -0.1159  MAPE 30.54%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1840  TEST Pearson_per_clip -0.0594
-
-[*] Epoch 21/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_21
-
-Epoch 21/30: Train avg loss 41.8036
-  VALID  HR MAE 3.625 BPM  RMSE 7.286 BPM  Pearson(HR) 0.8902  signal_pearson 0.3003  (n_subjects=12)
-  TEST   HR MAE 33.482 BPM  RMSE 42.085 BPM  Pearson(HR) -0.3698  signal_pearson -0.1702  MAPE 30.29%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1391  TEST Pearson_per_clip -0.0764
-
-[*] Epoch 22/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_22
-
-Epoch 22/30: Train avg loss 41.7915
-  VALID  HR MAE 2.966 BPM  RMSE 6.109 BPM  Pearson(HR) 0.9245  signal_pearson 0.3129  (n_subjects=12)
-  TEST   HR MAE 36.663 BPM  RMSE 43.975 BPM  Pearson(HR) -0.3214  signal_pearson -0.0212  MAPE 33.66%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1487  TEST Pearson_per_clip 0.0166
-
-[*] Epoch 23/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_23
-
-Epoch 23/30: Train avg loss 41.7776
-  VALID  HR MAE 1.538 BPM  RMSE 2.762 BPM  Pearson(HR) 0.9913  signal_pearson 0.3373  (n_subjects=12)
-  TEST   HR MAE 31.703 BPM  RMSE 40.753 BPM  Pearson(HR) -0.1882  signal_pearson -0.0842  MAPE 28.94%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1805  TEST Pearson_per_clip -0.0485
-
-[*] Epoch 24/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_24
-
-Epoch 24/30: Train avg loss 41.7499
-  VALID  HR MAE 4.358 BPM  RMSE 10.918 BPM  Pearson(HR) 0.7498  signal_pearson 0.2551  (n_subjects=12)
-  TEST   HR MAE 34.466 BPM  RMSE 42.389 BPM  Pearson(HR) -0.4354  signal_pearson -0.0925  MAPE 31.31%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1329  TEST Pearson_per_clip -0.0260
-
-[*] Epoch 25/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_25
-
-Epoch 25/30: Train avg loss 41.6900
-  VALID  HR MAE 5.457 BPM  RMSE 11.456 BPM  Pearson(HR) 0.7040  signal_pearson 0.2538  (n_subjects=12)
-  TEST   HR MAE 30.155 BPM  RMSE 37.395 BPM  Pearson(HR) -0.3700  signal_pearson -0.0901  MAPE 27.32%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1311  TEST Pearson_per_clip -0.0444
-
-[*] Epoch 26/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_26
-
-Epoch 26/30: Train avg loss 41.6501
-  VALID  HR MAE 4.211 BPM  RMSE 9.332 BPM  Pearson(HR) 0.8119  signal_pearson 0.2523  (n_subjects=12)
-  TEST   HR MAE 33.252 BPM  RMSE 41.209 BPM  Pearson(HR) -0.2961  signal_pearson -0.1457  MAPE 30.26%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1226  TEST Pearson_per_clip -0.0758
-
-[*] Epoch 27/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_27
-
-Epoch 27/30: Train avg loss 41.6265
-  VALID  HR MAE 5.200 BPM  RMSE 11.254 BPM  Pearson(HR) 0.7225  signal_pearson 0.2351  (n_subjects=12)
-  TEST   HR MAE 33.315 BPM  RMSE 41.067 BPM  Pearson(HR) -0.2189  signal_pearson -0.1169  MAPE 30.53%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1181  TEST Pearson_per_clip -0.0444
-
-[*] Epoch 28/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_28
-
-Epoch 28/30: Train avg loss 41.6109
-  VALID  HR MAE 3.259 BPM  RMSE 5.126 BPM  Pearson(HR) 0.9546  signal_pearson 0.2172  (n_subjects=12)
-  TEST   HR MAE 37.688 BPM  RMSE 44.338 BPM  Pearson(HR) -0.2314  signal_pearson 0.0343  MAPE 34.99%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.1076  TEST Pearson_per_clip 0.0122
-
-[*] Epoch 29/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_29
-
-Epoch 29/30: Train avg loss 41.5964
-  VALID  HR MAE 11.243 BPM  RMSE 14.700 BPM  Pearson(HR) 0.4406  signal_pearson 0.1563  (n_subjects=12)
-  TEST   HR MAE 31.410 BPM  RMSE 36.025 BPM  Pearson(HR) 0.0415  signal_pearson -0.0024  MAPE 29.11%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.0856  TEST Pearson_per_clip -0.0026
-
-[*] Epoch 30/30  alpha=0.05, beta=5.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_30
-
-Epoch 30/30: Train avg loss 41.5818
-  VALID  HR MAE 8.716 BPM  RMSE 15.773 BPM  Pearson(HR) 0.4906  signal_pearson 0.1397  (n_subjects=12)
-  TEST   HR MAE 35.533 BPM  RMSE 41.488 BPM  Pearson(HR) -0.1131  signal_pearson -0.0452  MAPE 33.09%  (n_subjects=42)
-  [per-clip ref] VALID Pearson_per_clip 0.0658  TEST Pearson_per_clip -0.0186
-
--> Best for PURE -> UBFC-rPPG: epoch 16 (selected by valid HR RMSE 1.634 BPM)
-   TEST HR  MAE 33.608 BPM  RMSE 42.573 BPM  MAPE 30.35%  Pearson(HR) -0.3757  signal_pearson -0.0494
+-> Best for PURE -> UBFC-rPPG: epoch 9 (selected by valid HR RMSE 1.924 BPM)
+   TEST HR  MAE 18.938 BPM  RMSE 26.794 BPM  MAPE 16.86%  Pearson(HR) 0.1309  signal_pearson 0.0793
 
 ======================================================================
-[*] UBFC-rPPG -> PURE
+[*] 종합 결과 — BiPhysFormer (ANN, BiFormer)
 ======================================================================
-  train clips: 362 (80% of UBFC-rPPG)
-  valid clips: 108 (20% of UBFC-rPPG) - used for best-epoch selection
-  test  clips: 1447 (PURE)
-  PE pretraining: disabled (rPPG-Toolbox 셋업, from scratch)
-  model params: 7380865
-  loss: alpha=1.0 (NegPearson) + beta=1.0 (CE+LD)  [rPPG-Toolbox: alpha=1.0, beta=1.0 constant]
-  optim: Adam(lr=0.0001, wd=5e-05) + StepLR(step=50, gamma=0.5)
-  grad_clip: max_norm=1.0
-  output norm: rPPG = (rPPG - mean(axis=-1)) / std(axis=-1)  [per-sample, rPPG-Toolbox]
-  data: DiffNormalized input/label, static face detection, no augmentation
-  EPOCHS: 30  (PhysFormer paper, 30ep)  schedule: epoch<=10 -> a=1.0,b=1.0; epoch>10 -> a=0.05,b=5.0
-
-[*] Epoch 1/30  alpha=1.0, beta=1.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_1
-
-Epoch 1/30: Train avg loss 8.9578
-  VALID  HR MAE 1.270 BPM  RMSE 3.809 BPM  Pearson(HR) 0.9418  signal_pearson 0.7745  (n_subjects=9)
-  TEST   HR MAE 12.692 BPM  RMSE 23.249 BPM  Pearson(HR) 0.5008  signal_pearson -0.0445  MAPE 22.89%  (n_subjects=59)
-  [per-clip ref] VALID Pearson_per_clip 0.6369  TEST Pearson_per_clip -0.0259
-
-[*] Epoch 2/30  alpha=1.0, beta=1.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_2
-
-Epoch 2/30: Train avg loss 8.6204
-  VALID  HR MAE 1.270 BPM  RMSE 3.809 BPM  Pearson(HR) 0.9418  signal_pearson 0.8152  (n_subjects=9)
-  TEST   HR MAE 11.336 BPM  RMSE 22.088 BPM  Pearson(HR) 0.5321  signal_pearson -0.0111  MAPE 19.80%  (n_subjects=59)
-  [per-clip ref] VALID Pearson_per_clip 0.6696  TEST Pearson_per_clip -0.0105
-
-[*] Epoch 3/30  alpha=1.0, beta=1.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_3
-
-Epoch 3/30: Train avg loss 8.5473
-  VALID  HR MAE 0.000 BPM  RMSE 0.000 BPM  Pearson(HR) 1.0000  signal_pearson 0.8301  (n_subjects=9)
-  TEST   HR MAE 12.804 BPM  RMSE 23.705 BPM  Pearson(HR) 0.4565  signal_pearson -0.0045  MAPE 22.45%  (n_subjects=59)
-  [per-clip ref] VALID Pearson_per_clip 0.6840  TEST Pearson_per_clip -0.0092
-
-[*] Epoch 4/30  alpha=1.0, beta=1.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_4
-
-Epoch 4/30: Train avg loss 8.5221
-  VALID  HR MAE 0.000 BPM  RMSE 0.000 BPM  Pearson(HR) 1.0000  signal_pearson 0.8532  (n_subjects=9)
-  TEST   HR MAE 12.819 BPM  RMSE 22.924 BPM  Pearson(HR) 0.5171  signal_pearson 0.0133  MAPE 23.32%  (n_subjects=59)
-  [per-clip ref] VALID Pearson_per_clip 0.6980  TEST Pearson_per_clip 0.0052
-
-[*] Epoch 5/30  alpha=1.0, beta=1.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_5
-
-Epoch 5/30: Train avg loss 8.5000
-  VALID  HR MAE 0.195 BPM  RMSE 0.586 BPM  Pearson(HR) 0.9984  signal_pearson 0.8549  (n_subjects=9)
-  TEST   HR MAE 11.605 BPM  RMSE 22.296 BPM  Pearson(HR) 0.4378  signal_pearson 0.0445  MAPE 18.34%  (n_subjects=59)
-  [per-clip ref] VALID Pearson_per_clip 0.6995  TEST Pearson_per_clip 0.0159
-
-[*] Epoch 6/30  alpha=1.0, beta=1.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_6
-
-Epoch 6/30: Train avg loss 8.4813
-  VALID  HR MAE 0.000 BPM  RMSE 0.000 BPM  Pearson(HR) 1.0000  signal_pearson 0.8595  (n_subjects=9)
-  TEST   HR MAE 9.623 BPM  RMSE 20.372 BPM  Pearson(HR) 0.5264  signal_pearson 0.0670  MAPE 14.28%  (n_subjects=59)
-  [per-clip ref] VALID Pearson_per_clip 0.7104  TEST Pearson_per_clip 0.0296
-
-[*] Epoch 7/30  alpha=1.0, beta=1.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_7
-
-Epoch 7/30: Train avg loss 8.4665
-  VALID  HR MAE 0.000 BPM  RMSE 0.000 BPM  Pearson(HR) 1.0000  signal_pearson 0.8527  (n_subjects=9)
-  TEST   HR MAE 8.499 BPM  RMSE 18.180 BPM  Pearson(HR) 0.6778  signal_pearson -0.0023  MAPE 14.73%  (n_subjects=59)
-  [per-clip ref] VALID Pearson_per_clip 0.7094  TEST Pearson_per_clip -0.0101
-
-[*] Epoch 8/30  alpha=1.0, beta=1.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_8
-
-Epoch 8/30: Train avg loss 8.4515
-  VALID  HR MAE 0.000 BPM  RMSE 0.000 BPM  Pearson(HR) 1.0000  signal_pearson 0.8460  (n_subjects=9)
-  TEST   HR MAE 11.902 BPM  RMSE 21.936 BPM  Pearson(HR) 0.5117  signal_pearson 0.0123  MAPE 20.65%  (n_subjects=59)
-  [per-clip ref] VALID Pearson_per_clip 0.6861  TEST Pearson_per_clip -0.0022
-
-[*] Epoch 9/30  alpha=1.0, beta=1.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_9
-
-Epoch 9/30: Train avg loss 8.4452
-  VALID  HR MAE 1.758 BPM  RMSE 4.081 BPM  Pearson(HR) 0.9500  signal_pearson 0.8291  (n_subjects=9)
-  TEST   HR MAE 11.858 BPM  RMSE 22.230 BPM  Pearson(HR) 0.5326  signal_pearson -0.0044  MAPE 21.23%  (n_subjects=59)
-  [per-clip ref] VALID Pearson_per_clip 0.6730  TEST Pearson_per_clip -0.0104
-
-[*] Epoch 10/30  alpha=1.0, beta=1.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_10
-
-Epoch 10/30: Train avg loss 8.4386
-  VALID  HR MAE 0.000 BPM  RMSE 0.000 BPM  Pearson(HR) 1.0000  signal_pearson 0.8708  (n_subjects=9)
-  TEST   HR MAE 10.376 BPM  RMSE 20.457 BPM  Pearson(HR) 0.6022  signal_pearson 0.0510  MAPE 18.42%  (n_subjects=59)
-  [per-clip ref] VALID Pearson_per_clip 0.7186  TEST Pearson_per_clip 0.0213
-
-[*] Epoch 11/30  alpha=1.0, beta=1.0000
-  current_lr: 1.00e-04
-  waveforms saved → results/cross_biphysformer\waveforms\epoch_11
-
-Epoch 11/30: Train avg loss 8.4335
-  VALID  HR MAE 0.000 BPM  RMSE 0.000 BPM  Pearson(HR) 1.0000  signal_pearson 0.8685  (n_subjects=9)
-  TEST   HR MAE 11.135 BPM  RMSE 21.124 BPM  Pearson(HR) 0.5814  signal_pearson 0.0388  MAPE 19.98%  (n_subjects=59)
-  [per-clip ref] VALID Pearson_per_clip 0.7021  TEST Pearson_per_clip 0.0174
-
-[*] Epoch 12/30  alpha=0.05, beta=5.0000
+  PURE -> UBFC-rPPG:
+    Best @ epoch 9: per-clip Pearson = 0.0406  (pooled 0.0406)
+      HR  MAE 18.938 BPM  RMSE 26.794 BPM  MAPE 16.86%
