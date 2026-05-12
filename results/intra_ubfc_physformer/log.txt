@@ -1,0 +1,91 @@
+[*] Seed fixed to 42
+[*] BiPhysFormer (PhysFormer official + BiLevel Routing Attention)
+
+======================================================================
+[*] UBFC-rPPG -> UBFC-rPPG
+======================================================================
+  train clips: 271 (0-60% of UBFC-rPPG)
+  test  clips: 394 (60-100% = 40% of UBFC-rPPG) - RhythmFormer protocol
+  NOTE: valid = test (no separate valid set, best epoch by test RMSE)
+  PE pretraining: disabled (rPPG-Toolbox 셋업, from scratch)
+  model params: 7380865
+  loss: alpha=1.0 (NegPearson) + beta=1.0 (CE+LD)  [rPPG-Toolbox: alpha=1.0, beta=1.0 constant]
+  optim: Adam(lr=0.0001, wd=5e-05) + StepLR(step=50, gamma=0.5)
+  grad_clip: max_norm=1.0
+  output norm: rPPG = (rPPG - mean(axis=-1)) / std(axis=-1)  [per-sample, rPPG-Toolbox]
+  data: DiffNormalized input/label, static face detection, no augmentation
+  EPOCHS: 10  (PhysFormer paper, 30ep)  schedule: epoch<=10 -> a=1.0,b=1.0; epoch>10 -> a=0.05,b=5.0
+
+[*] Epoch 1/10  alpha=1.0, beta=1.0000
+  current_lr: 1.00e-04
+  waveforms saved → results/intra_ubfc_physformer\waveforms\epoch_1
+
+Epoch 1/10: Train avg loss 9.1553
+  VALID  HR MAE 0.724 BPM  RMSE 1.883 BPM  Pearson(HR) 0.9926  signal_pearson 0.7743  (n_subjects=17)
+  TEST   HR MAE 0.724 BPM  RMSE 1.883 BPM  Pearson(HR) 0.9926  signal_pearson 0.7743  MAPE 0.69%  (n_subjects=17)
+  [per-clip ref] VALID Pearson_per_clip 0.6363  TEST Pearson_per_clip 0.6363
+
+[*] Epoch 2/10  alpha=1.0, beta=1.0000
+  current_lr: 1.00e-04
+  waveforms saved → results/intra_ubfc_physformer\waveforms\epoch_2
+
+Epoch 2/10: Train avg loss 8.6933
+  VALID  HR MAE 0.724 BPM  RMSE 1.732 BPM  Pearson(HR) 0.9950  signal_pearson 0.8512  (n_subjects=17)
+  TEST   HR MAE 0.724 BPM  RMSE 1.732 BPM  Pearson(HR) 0.9950  signal_pearson 0.8512  MAPE 0.87%  (n_subjects=17)
+  [per-clip ref] VALID Pearson_per_clip 0.7128  TEST Pearson_per_clip 0.7128
+
+[*] Epoch 3/10  alpha=1.0, beta=1.0000
+  current_lr: 1.00e-04
+  waveforms saved → results/intra_ubfc_physformer\waveforms\epoch_3
+
+Epoch 3/10: Train avg loss 8.5889
+  VALID  HR MAE 0.569 BPM  RMSE 1.771 BPM  Pearson(HR) 0.9936  signal_pearson 0.8799  (n_subjects=17)
+  TEST   HR MAE 0.569 BPM  RMSE 1.771 BPM  Pearson(HR) 0.9936  signal_pearson 0.8799  MAPE 0.53%  (n_subjects=17)
+  [per-clip ref] VALID Pearson_per_clip 0.7499  TEST Pearson_per_clip 0.7499
+
+[*] Epoch 4/10  alpha=1.0, beta=1.0000
+  current_lr: 1.00e-04
+  waveforms saved → results/intra_ubfc_physformer\waveforms\epoch_4
+
+Epoch 4/10: Train avg loss 8.5468
+  VALID  HR MAE 0.103 BPM  RMSE 0.426 BPM  Pearson(HR) 0.9997  signal_pearson 0.8835  (n_subjects=17)
+  TEST   HR MAE 0.103 BPM  RMSE 0.426 BPM  Pearson(HR) 0.9997  signal_pearson 0.8835  MAPE 0.09%  (n_subjects=17)
+  [per-clip ref] VALID Pearson_per_clip 0.7540  TEST Pearson_per_clip 0.7540
+
+[*] Epoch 5/10  alpha=1.0, beta=1.0000
+  current_lr: 1.00e-04
+  waveforms saved → results/intra_ubfc_physformer\waveforms\epoch_5
+
+Epoch 5/10: Train avg loss 8.5130
+  VALID  HR MAE 0.207 BPM  RMSE 0.603 BPM  Pearson(HR) 0.9993  signal_pearson 0.8913  (n_subjects=17)
+  TEST   HR MAE 0.207 BPM  RMSE 0.603 BPM  Pearson(HR) 0.9993  signal_pearson 0.8913  MAPE 0.19%  (n_subjects=17)
+  [per-clip ref] VALID Pearson_per_clip 0.7556  TEST Pearson_per_clip 0.7556
+
+[*] Epoch 6/10  alpha=1.0, beta=1.0000
+  current_lr: 1.00e-04
+  waveforms saved → results/intra_ubfc_physformer\waveforms\epoch_6
+
+Epoch 6/10: Train avg loss 8.4978
+  VALID  HR MAE 0.052 BPM  RMSE 0.213 BPM  Pearson(HR) 0.9999  signal_pearson 0.8901  (n_subjects=17)
+  TEST   HR MAE 0.052 BPM  RMSE 0.213 BPM  Pearson(HR) 0.9999  signal_pearson 0.8901  MAPE 0.08%  (n_subjects=17)
+  [per-clip ref] VALID Pearson_per_clip 0.7566  TEST Pearson_per_clip 0.7566
+
+[*] Epoch 7/10  alpha=1.0, beta=1.0000
+  current_lr: 1.00e-04
+  waveforms saved → results/intra_ubfc_physformer\waveforms\epoch_7
+
+Epoch 7/10: Train avg loss 8.4774
+  VALID  HR MAE 0.103 BPM  RMSE 0.426 BPM  Pearson(HR) 0.9996  signal_pearson 0.8943  (n_subjects=17)
+  TEST   HR MAE 0.103 BPM  RMSE 0.426 BPM  Pearson(HR) 0.9996  signal_pearson 0.8943  MAPE 0.11%  (n_subjects=17)
+  [per-clip ref] VALID Pearson_per_clip 0.7446  TEST Pearson_per_clip 0.7446
+
+[*] Epoch 8/10  alpha=1.0, beta=1.0000
+  current_lr: 1.00e-04
+  waveforms saved → results/intra_ubfc_physformer\waveforms\epoch_8
+
+Epoch 8/10: Train avg loss 8.4642
+  VALID  HR MAE 0.569 BPM  RMSE 1.430 BPM  Pearson(HR) 0.9967  signal_pearson 0.8968  (n_subjects=17)
+  TEST   HR MAE 0.569 BPM  RMSE 1.430 BPM  Pearson(HR) 0.9967  signal_pearson 0.8968  MAPE 0.72%  (n_subjects=17)
+  [per-clip ref] VALID Pearson_per_clip 0.7529  TEST Pearson_per_clip 0.7529
+
+[*] Epoch 9/10  alpha=1.0, beta=1.0000

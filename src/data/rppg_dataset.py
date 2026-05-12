@@ -145,16 +145,24 @@ class RPPGDataset(Dataset):
         need_count = self.clip_len + (1 if self.data_type == 'diff_normalized' else 0)
 
         if self.dataset_name == 'PURE':
-            subjects = sorted([d for d in os.listdir(self.root_dir) if os.path.isdir(os.path.join(self.root_dir, d))])
+            sessions = sorted([d for d in os.listdir(self.root_dir) if os.path.isdir(os.path.join(self.root_dir, d))])
             if self.subjects_filter is not None:
-                subjects = [s for s in subjects if s in self.subjects_filter]
+                sessions = [s for s in sessions if s in self.subjects_filter]
             if self.split_range is not None:
-                n = len(subjects)
-                s_idx = int(self.split_range[0] * n)
-                e_idx = int(self.split_range[1] * n)
-                subjects = subjects[s_idx:e_idx]
-                print(f"[Dataset] split_range={self.split_range} → {len(subjects)} subjects "
-                      f"({subjects[0] if subjects else '-'} ... {subjects[-1] if subjects else '-'})")
+                # SUBJECT-EXCLUSIVE split: PURE 디렉토리 "XX-YY" 에서 XX=subject ID 추출,
+                # subject ID 단위로 split (session-level split 은 same subject 가 train/test 에 leak)
+                subject_ids = sorted(set(s.split('-')[0] for s in sessions))
+                n_subj = len(subject_ids)
+                s_idx = int(self.split_range[0] * n_subj)
+                e_idx = int(self.split_range[1] * n_subj)
+                selected_subj = subject_ids[s_idx:e_idx]
+                sessions = [s for s in sessions if s.split('-')[0] in selected_subj]
+                print(f"[Dataset] split_range={self.split_range} subject-exclusive: "
+                      f"{n_subj} subjects → {len(selected_subj)} subjects "
+                      f"({selected_subj[0] if selected_subj else '-'} ... "
+                      f"{selected_subj[-1] if selected_subj else '-'}), "
+                      f"{len(sessions)} sessions")
+            subjects = sessions
             for subj in subjects:
                 json_path = os.path.join(self.root_dir, subj, f"{subj}.json")
                 img_dir = os.path.join(self.root_dir, subj, subj)
