@@ -6,7 +6,7 @@ PhysFormer (Yu et al., CVPR 2022) ??怨듭떇 GitHub 肄붾뱶??吏곸젒 ?ы똿
   https://github.com/ZitongYu/PhysFormer/blob/main/model/physformer.py
 
 ?⑸룄:
-  1) PE block (Stem0+Stem1+Stem2 + patch_embedding) ?ъ쟾?숈뒿??  2) BiPhysFormer (BiFormer ?곸슜) ???fair baseline 鍮꾧탳??
+  1) PE block (Stem0+Stem1+Stem2 + patch_embedding) ?ъ쟾?숈뒿??  2) BiPulseFormer (BiFormer ?곸슜) ???fair baseline 鍮꾧탳??
 ?먮낯 ?鍮?李⑥씠??import ? type-hint ?뺣━肉? 紐⑤뜽 援ъ“/init/forward ???숈씪.
 """
 import math

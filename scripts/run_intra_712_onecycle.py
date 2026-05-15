@@ -1,4 +1,4 @@
-"""BiPhysFormer intra 7/1/2 — rPPG-Toolbox 표준 (OneCycleLR + 20 epochs).
+﻿"""BiPulseFormer intra 7/1/2 — rPPG-Toolbox 표준 (OneCycleLR + 20 epochs).
 
 PURE: subject-exclusive RANDOM (seed=42)
   TRAIN (0.0-0.7): 7 subjects (03,04,06,07,08,09,10)  - subject 07 outlier 포함
@@ -29,7 +29,7 @@ import torch
 import torch.optim as optim
 from scipy.signal import welch
 
-from src.models.biphysformer import ViT_BiPhysFormer
+from src.models.bipulseformer import ViT_BiPulseFormer
 from src.data.rppg_dataset import get_dataloader
 from src.train import NegPearsonLoss, FrequencyLoss
 from src.evaluation import evaluate_per_subject, get_subject_signals
@@ -139,7 +139,7 @@ def run(name, path, result_dir, use_random_subj=False):
     log(f"  valid clips: {len(valid_loader.dataset)}")
     log(f"  test  clips: {len(test_loader.dataset)}")
 
-    model = ViT_BiPhysFormer(
+    model = ViT_BiPulseFormer(
         patches=(4, 4, 4), dim=96, ff_dim=144, num_heads=4, num_layers=12,
         dropout_rate=0.1, theta=0.7, image_size=(160, 128, 128),
         n_win=(2, 2, 2), topk=4,
@@ -224,11 +224,11 @@ def run(name, path, result_dir, use_random_subj=False):
 
 def main():
     _seed_everything(SEED)
-    print(f"[*] BiPhysFormer intra 7/1/2 — OneCycleLR + 20 epochs")
+    print(f"[*] BiPulseFormer intra 7/1/2 — OneCycleLR + 20 epochs")
     results = []
     for name, path, out, rand in [
-        ('PURE', PURE_PATH, 'results/intra_pure_biphysformer_712_oc20', True),
-        ('UBFC-rPPG', UBFC_PATH, 'results/intra_ubfc_biphysformer_712_oc20', False),
+        ('PURE', PURE_PATH, 'results/intra_pure_bipulseformer_712_oc20', True),
+        ('UBFC-rPPG', UBFC_PATH, 'results/intra_ubfc_bipulseformer_712_oc20', False),
     ]:
         try:
             best, ep = run(name, path, out, use_random_subj=rand)

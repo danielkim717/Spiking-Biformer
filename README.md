@@ -11,9 +11,17 @@ PhysFormer (Yu et al., CVPR 2022) 의 transformer block 에 **BiFormer (Zhu et a
 | **UBFC-rPPG** | subject-exclusive (1-32 vs 33-49) | E8 | **0.052** | **0.213** | **0.083** | **0.9999** | 17 |
 | **PURE** | session-per-subject (60% sessions per subject) | E7 | **6.804** | 16.372 | 7.429 | 0.7368 | 29 |
 
-\* PURE 의 sort-based subject-exclusive 6:4 (subjects 01-06 train, 07-10 test) 는 subject 07 (HR 127, outlier) 을 test 에 배정 → sub-harmonic 예측으로 MAE 12.80 폭증. Session-per-subject 변형으로 outlier 영향 완화 (MAE 6.80) 하나 여전히 unstable. 안정적 PURE 평가는 7:1:2 + random subject (Protocol 2).
+\* PURE 의 sort-based subject-exclusive 6:4 (subjects 01-06 train, 07-10 test) 는 subject 07 (HR 127, outlier) 을 test 에 배정 → sub-harmonic 예측으로 MAE 12.80 폭증. Session-per-subject 변형으로 outlier 영향 완화 (MAE 6.80) 하나 여전히 unstable. 안정적 PURE 평가는 80:20 (Protocol 2) 또는 7:1:2 random (Protocol 3).
 
-### Protocol 2 — Stricter setup (7:1:2 split, separate valid, OneCycleLR, 20 epochs)
+### Protocol 2 — 8:0:2 split (rPPG-Toolbox 표준 PURE, valid=test)
+
+| Dataset | Best Ep | MAE↓ | RMSE↓ | MAPE%↓ | Pearson↑ | n_subj |
+|---|---:|---:|---:|---:|---:|---:|
+| **PURE** (subjects 01-08 train, 09-10 test) | E9 | **1.099** | **1.838** | **1.393** | **0.9949** | 12 |
+
+→ subject 07 (HR 127 outlier) 이 train 에 자동 포함되어 high-HR coverage 확보. PhysFormer paper PURE (MAE 1.10) 와 정확히 일치.
+
+### Protocol 3 — Stricter setup (7:1:2 split, separate valid, OneCycleLR, 20 epochs)
 
 | Dataset | Best Ep | MAE↓ | RMSE↓ | MAPE%↓ | Pearson↑ | n_subj |
 |---|---:|---:|---:|---:|---:|---:|
@@ -31,12 +39,13 @@ PhysFormer (Yu et al., CVPR 2022) 의 transformer block 에 **BiFormer (Zhu et a
 | EfficientPhys (WACV'23) | 1.14 | 0.99 | 1.33 | 0.97 |
 | PhysFormer (CVPR'22) | 0.40 | 0.99 | 1.10 | 0.99 |
 | RhythmFormer (PR'25) | 0.50 | 0.99 | 0.66 | 0.99 |
-| **BiPhysFormer 6:4 (우리)** | **0.052** | **0.9999** | 6.804* | 0.7368* |
-| **BiPhysFormer 7:1:2 OC20 (우리)** | **0.391** | **0.9960** | **0.769** | **0.9602** |
+| **BiPulseFormer 6:4 (우리)** | **0.052** | **0.9999** | 6.804* | 0.7368* |
+| **BiPulseFormer 8:2 (우리)** | — | — | **1.099** | **0.9949** |
+| **BiPulseFormer 7:1:2 OC20 (우리)** | **0.391** | **0.9960** | **0.769** | **0.9602** |
 
-\* PURE 6:4 의 outlier subject 07 OOD 영향. 7:1:2 random shuffle 로 해결.
+\* PURE 6:4 의 outlier subject 07 OOD 영향. 8:2 또는 7:1:2 random 으로 해결.
 
-→ UBFC 에서 paper SOTA 압도. PURE 7:1:2 에서 PhysFormer (1.10) 우수, Pearson 0.96 은 test set 의 좁은 HR 분포 (std 3.79) 영향.
+→ UBFC 에서 paper SOTA 압도. PURE 8:2 에서 PhysFormer (1.10) 와 동등 (1.099), Pearson 0.9949. PURE 7:1:2 OC20 (random shuffle) 에서 MAE 0.769 로 더 우수, 다만 Pearson 0.96 은 test set 의 좁은 HR 분포 (std 3.79) 영향.
 
 ## 🏗️ Architecture
 
@@ -61,7 +70,7 @@ Input video (B, 3, 160, 128, 128)
 - **MHSA_TDC**: TDC-based Q/K projection + Conv1×1 V projection + scaled softmax attention with `gra_sharp=2.0`
 - **FFN_ST**: 1×1 → BN → ELU → depthwise 3³ STConv → BN → ELU → 1×1 → BN
 
-### 2. BiPhysFormer (BiFormer 적용 ANN 모델)
+### 2. BiPulseFormer (BiFormer 적용 ANN 모델)
 
 PhysFormer 의 `MHSA_TDC` (full attention) 자리를 **`BiLevelRoutingAttention_TDC`** (sparse top-k routing attention) 로 교체.
 
@@ -218,7 +227,7 @@ def forward(self, x):
 src/
   models/
     physformer_baseline.py      # PhysFormer (CVPR 2022) 공식 코드 포팅
-    biphysformer.py             # PhysFormer + BiLevel Routing Attention (ANN)
+    bipulseformer.py            # PhysFormer + BiLevel Routing Attention (ANN)
     spiking_physformer.py       # Spiking-PhysFormer + BiSDA (SNN)
   data/
     rppg_dataset.py             # PURE/UBFC-rPPG dataset
@@ -229,11 +238,12 @@ src/
   evaluation_per_clip.py        # per-clip 보조 평가 (5.3s clip)
   train.py                      # NegPearsonLoss + FrequencyLoss (DLDL_softmax2)
 scripts/
-  run_intra_ubfc_biphysformer.py     # UBFC 6:4 (RhythmFormer protocol) 학습
-  run_intra_pure_biphysformer.py     # PURE 6:4 학습
-  run_intra_712_onecycle.py          # 7:1:2 OneCycleLR 20ep (PURE+UBFC 통합)
-  eval_mape_paper.py                  # per-subject MAPE 계산
-  eval_valid_vs_test_best_oc20.py    # valid-best vs test-best epoch 비교
+  run_intra_ubfc_bipulseformer.py        # UBFC 6:4 (RhythmFormer protocol) 학습
+  run_intra_pure_bipulseformer.py        # PURE 6:4 학습 (session-per-subject)
+  run_intra_pure_bipulseformer_80_20.py  # PURE 8:0:2 (rPPG-Toolbox standard) 학습
+  run_intra_712_onecycle.py              # 7:1:2 OneCycleLR 20ep (PURE+UBFC 통합)
+  eval_mape_paper.py                      # per-subject MAPE 계산
+  eval_valid_vs_test_best_oc20.py        # valid-best vs test-best epoch 비교
 ```
 
 ## 🔋 Energy Analysis
@@ -262,32 +272,35 @@ SNN_energy ∝ N_params × AC × spike_rate × T_snn
 | 모델 | 모델 크기 ratio | Energy ratio | Pearson(HR) |
 |---|---|---|---|
 | PhysFormer | 1.0× | 1.0× | 0.528 (재현) |
-| BiPhysFormer (ANN+BRA) | 1.0× | 0.5× (sparse attn) | 0.632 |
+| BiPulseFormer (ANN+BRA) | 1.0× | 0.5× (sparse attn) | 0.632 |
 | **Spiking-Biformer** ⭐ | **0.293×** | **~0.012×** | **0.955** |
 
 ## 🚀 실행 방법
 
 ```bash
 # Protocol 1 — 6:4 (RhythmFormer Table 1)
-python scripts/run_intra_ubfc_biphysformer.py     # UBFC intra 6:4
-python scripts/run_intra_pure_biphysformer.py     # PURE intra 6:4
+python scripts/run_intra_ubfc_bipulseformer.py        # UBFC intra 6:4
+python scripts/run_intra_pure_bipulseformer.py        # PURE intra 6:4 (session-per-subject)
 
-# Protocol 2 — 7:1:2 + OneCycleLR + 20 epochs (paper 와 동등한 학습 setup)
-python scripts/run_intra_712_onecycle.py          # PURE + UBFC 통합
+# Protocol 2 — 8:0:2 (rPPG-Toolbox standard PURE)
+python scripts/run_intra_pure_bipulseformer_80_20.py  # PURE intra 8:2
+
+# Protocol 3 — 7:1:2 + OneCycleLR + 20 epochs (paper 와 동등한 학습 setup)
+python scripts/run_intra_712_onecycle.py              # PURE + UBFC 통합
 
 # 결과 평가 (per-subject + per-clip + MAPE)
-python scripts/eval_mape_paper.py                 # 모든 saved checkpoints
-python scripts/eval_valid_vs_test_best_oc20.py    # 7:1:2 의 valid-best vs test-best
+python scripts/eval_mape_paper.py                     # 모든 saved checkpoints
+python scripts/eval_valid_vs_test_best_oc20.py        # 7:1:2 의 valid-best vs test-best
 ```
 
-결과는 `results/intra_{dataset}_biphysformer{_712_oc20}/` 에 저장됩니다:
+결과는 `results/intra_{dataset}_bipulseformer{_80_20,_712_oc20}/` 에 저장됩니다:
 - `log.txt` — 학습 로그 (모든 epoch 결과)
 - `summary.json` — best epoch + full history (JSON)
 - `checkpoints/{model}_epoch{N}.pt` — best epoch checkpoint
 
 ## 핵심 기여
 
-1. **BiFormer 를 PhysFormer 에 적용** (ANN, BiPhysFormer):
+1. **BiFormer 를 PhysFormer 에 적용** (ANN, BiPulseFormer):
    - Sparse attention (top-k=4 of 8 windows)
    - Attention compute 50% 감소
 
@@ -296,8 +309,9 @@ python scripts/eval_valid_vs_test_best_oc20.py    # 7:1:2 의 valid-best vs test
    - Sliding window evaluation (chunk_step=80, 2× overlap)
    - Welch periodogram 기반 HR target/metric
 
-3. **이중 평가 protocol 지원**:
+3. **3 가지 평가 protocol 지원**:
    - 6:4 RhythmFormer Table 1 (다른 paper 와 직접 비교)
+   - 8:0:2 rPPG-Toolbox standard PURE
    - 7:1:2 + OneCycleLR + 20 epochs (separate valid, no test-peek)
 
 4. **PURE 의 outlier subject 07 처리**:

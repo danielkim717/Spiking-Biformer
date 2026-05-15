@@ -1,4 +1,4 @@
-"""For 7/1/2 OC20 results, eval both VALID-best and TEST-best epoch.
+﻿"""For 7/1/2 OC20 results, eval both VALID-best and TEST-best epoch.
 
 Metrics: per-subject MAE, MAPE, Pearson(HR) (paper-comparable)
 """
@@ -11,7 +11,7 @@ except Exception:
 
 import numpy as np
 import torch
-from src.models.biphysformer import ViT_BiPhysFormer
+from src.models.bipulseformer import ViT_BiPulseFormer
 from src.data.rppg_dataset import get_dataloader
 from src.evaluation import evaluate_per_subject
 
@@ -25,7 +25,7 @@ def eval_ckpt(ckpt, dataset, path, split_range, pure_mode='subject_exclusive'):
     loader = get_dataloader(dataset, path, batch_size=4, clip_len=160,
                             shuffle=False, chunk_step=80,
                             split_range=split_range, **common)
-    model = ViT_BiPhysFormer(
+    model = ViT_BiPulseFormer(
         patches=(4, 4, 4), dim=96, ff_dim=144, num_heads=4, num_layers=12,
         dropout_rate=0.1, theta=0.7, image_size=(160, 128, 128),
         n_win=(2, 2, 2), topk=4,
@@ -58,11 +58,11 @@ def main():
     configs = [
         # (name, result_dir, dataset, path, split_range, pure_mode, ckpt_prefix)
         ('PURE 7/1/2 random OC20',
-         'results/intra_pure_biphysformer_712_oc20',
+         'results/intra_pure_bipulseformer_712_oc20',
          'PURE', 'D:\\PURE', (0.8, 1.0),
          'subject_exclusive_random', 'PURE_epoch'),
         ('UBFC 7/1/2 OC20',
-         'results/intra_ubfc_biphysformer_712_oc20',
+         'results/intra_ubfc_bipulseformer_712_oc20',
          'UBFC-rPPG', 'D:\\UBFC-rPPG', (0.8, 1.0),
          'subject_exclusive', 'UBFC-rPPG_epoch'),
     ]

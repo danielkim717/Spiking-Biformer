@@ -16,14 +16,13 @@ results/startup_error.txt
 results/*/run.log
 results/*/run.log.err
 
-# Exclude obsolete result directories (only 6:4 and 7/1/2 OC20 kept)
+# Exclude obsolete result directories (only 6:4, 80:20, 7:1:2 OC20 kept)
 results/cross_*/
-results/intra_biphysformer/
-results/intra_pure_biphysformer_712/
-results/intra_pure_biphysformer_712_random/
-results/intra_pure_biphysformer_80_20/
-results/intra_pure_biphysformer_subj_exclusive/
-results/intra_ubfc_biphysformer_712/
+results/intra_bipulseformer/
+results/intra_pure_bipulseformer_712/
+results/intra_pure_bipulseformer_712_random/
+results/intra_pure_bipulseformer_subj_exclusive/
+results/intra_ubfc_bipulseformer_712/
 results/intra_ubfc_physformer/
 results/intra_ubfc_spiking/
 results/pretrain_*/
@@ -39,8 +38,7 @@ results/per_clip_test_best.txt
 results/pure_oc20_analysis.txt
 results/valid_vs_test_oc20.txt
 results/plots/spiking_biformer/
-results/plots/biphysformer/per_subject_intra_PURE_session_split_epoch7.csv
-results/plots/biphysformer/per_subject_intra_PURE_80_20_epoch9.csv
+results/plots/bipulseformer/per_subject_intra_PURE_session_split_epoch7.csv
 
 # Big files
 *.avi
@@ -64,12 +62,13 @@ tmp_*.ipynb
 
 # PNG default-exclude (we'll force-add specific plots)
 *.png
-!results/plots/biphysformer/scatter_*.png
-!results/plots/biphysformer/bland_altman_*.png
+!results/plots/bipulseformer/scatter_*.png
+!results/plots/bipulseformer/bland_altman_*.png
 
 # Checkpoint default-exclude — only keep best epoch per training
 results/*/checkpoints/*.pt
-!results/intra_ubfc_biphysformer/checkpoints/UBFC-rPPG_to_UBFC-rPPG_epoch8.pt
-!results/intra_pure_biphysformer/checkpoints/PURE_to_PURE_epoch7.pt
-!results/intra_pure_biphysformer_712_oc20/checkpoints/PURE_epoch11.pt
-!results/intra_ubfc_biphysformer_712_oc20/checkpoints/UBFC-rPPG_epoch10.pt
+!results/intra_ubfc_bipulseformer/checkpoints/UBFC-rPPG_to_UBFC-rPPG_epoch8.pt
+!results/intra_pure_bipulseformer/checkpoints/PURE_to_PURE_epoch7.pt
+!results/intra_pure_bipulseformer_80_20/checkpoints/PURE_to_PURE_epoch9.pt
+!results/intra_pure_bipulseformer_712_oc20/checkpoints/PURE_epoch11.pt
+!results/intra_ubfc_bipulseformer_712_oc20/checkpoints/UBFC-rPPG_epoch10.pt

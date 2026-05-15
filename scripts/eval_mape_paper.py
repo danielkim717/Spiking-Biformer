@@ -1,4 +1,4 @@
-"""Eval MAPE for all paper-reportable checkpoints.
+﻿"""Eval MAPE for all paper-reportable checkpoints.
 
 per-subject MAPE = mean(|pred_hr - gt_hr| / gt_hr) * 100
 """
@@ -11,7 +11,7 @@ except Exception:
 
 import numpy as np
 import torch
-from src.models.biphysformer import ViT_BiPhysFormer
+from src.models.bipulseformer import ViT_BiPulseFormer
 from src.data.rppg_dataset import get_dataloader
 from src.evaluation import evaluate_per_subject, get_subject_signals
 
@@ -25,7 +25,7 @@ def eval_ckpt(ckpt, dataset, path, split_range, label, pure_mode='subject_exclus
     loader = get_dataloader(dataset, path, batch_size=4, clip_len=160,
                             shuffle=False, chunk_step=80,
                             split_range=split_range, **common)
-    model = ViT_BiPhysFormer(
+    model = ViT_BiPulseFormer(
         patches=(4, 4, 4), dim=96, ff_dim=144, num_heads=4, num_layers=12,
         dropout_rate=0.1, theta=0.7, image_size=(160, 128, 128),
         n_win=(2, 2, 2), topk=4,
@@ -63,22 +63,22 @@ def eval_ckpt(ckpt, dataset, path, split_range, label, pure_mode='subject_exclus
 
 def main():
     print("=" * 75)
-    print("BiPhysFormer — Per-subject (paper-comparable) MAPE 계산")
+    print("BiPulseFormer — Per-subject (paper-comparable) MAPE 계산")
     print("=" * 75)
 
     targets = [
         # (label, ckpt, dataset, path, split_range, pure_mode)
         ("UBFC intra 60/40 RhythmFormer protocol (valid=test, 10 ep, StepLR) E8",
-         "results/intra_ubfc_biphysformer/checkpoints/UBFC-rPPG_to_UBFC-rPPG_epoch8.pt",
+         "results/intra_ubfc_bipulseformer/checkpoints/UBFC-rPPG_to_UBFC-rPPG_epoch8.pt",
          "UBFC-rPPG", "D:\\UBFC-rPPG", (0.6, 1.0), 'subject_exclusive'),
         ("UBFC intra 7/1/2 (separate valid, 20 ep, OneCycleLR) E10",
-         "results/intra_ubfc_biphysformer_712_oc20/checkpoints/UBFC-rPPG_epoch10.pt",
+         "results/intra_ubfc_bipulseformer_712_oc20/checkpoints/UBFC-rPPG_epoch10.pt",
          "UBFC-rPPG", "D:\\UBFC-rPPG", (0.8, 1.0), 'subject_exclusive'),
         ("PURE intra 7/1/2 random (separate valid, 20 ep, OneCycleLR) E11",
-         "results/intra_pure_biphysformer_712_oc20/checkpoints/PURE_epoch11.pt",
+         "results/intra_pure_bipulseformer_712_oc20/checkpoints/PURE_epoch11.pt",
          "PURE", "D:\\PURE", (0.8, 1.0), 'subject_exclusive_random'),
         ("PURE intra 80/20 (valid=test, 10 ep, StepLR) E9",
-         "results/intra_pure_biphysformer_80_20/checkpoints/PURE_to_PURE_epoch9.pt",
+         "results/intra_pure_bipulseformer_80_20/checkpoints/PURE_to_PURE_epoch9.pt",
          "PURE", "D:\\PURE", (0.8, 1.0), 'subject_exclusive'),
     ]
 

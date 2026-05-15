@@ -1,0 +1,68 @@
+[*] Seed fixed to 42
+[*] BiPhysFormer PURE intra — 80/20 subject-exclusive (rPPG-Toolbox standard)
+
+======================================================================
+[*] PURE -> PURE  (80/20 subject-exclusive split)
+======================================================================
+  train clips: 589 (subjects 01-08, 80% subject-exclusive)
+  test  clips: 296 (subjects 09-10, 20% subject-exclusive)
+  NOTE: valid = test (RhythmFormer protocol, UBFC 와 동일)
+  Subject 07 (high-HR outlier, mean 127 BPM) 이 TRAIN 에 포함됨
+  PE pretraining: disabled
+  model params: 7380865
+  loss: alpha=1.0 (NegPearson) + beta=1.0 (CE+LD)
+  optim: Adam(lr=0.0001, wd=5e-05)  grad_clip: max_norm=1.0
+  EPOCHS: 10
+
+[*] Epoch 1/10  alpha=1.0, beta=1.0
+
+Epoch 1/10: Train loss 9.4054
+  TEST  HR MAE 1.794 BPM  RMSE 3.021 BPM  Pearson(HR) 0.9890  sig_Pearson 0.2883  MAPE 2.50%  (n_subjects=12)
+
+[*] Epoch 2/10  alpha=1.0, beta=1.0
+
+Epoch 2/10: Train loss 9.2363
+  TEST  HR MAE 1.538 BPM  RMSE 2.831 BPM  Pearson(HR) 0.9911  sig_Pearson 0.3525  MAPE 1.91%  (n_subjects=12)
+
+[*] Epoch 3/10  alpha=1.0, beta=1.0
+
+Epoch 3/10: Train loss 9.1781
+  TEST  HR MAE 1.538 BPM  RMSE 2.831 BPM  Pearson(HR) 0.9911  sig_Pearson 0.3750  MAPE 1.91%  (n_subjects=12)
+
+[*] Epoch 4/10  alpha=1.0, beta=1.0
+
+Epoch 4/10: Train loss 9.1160
+  TEST  HR MAE 1.611 BPM  RMSE 2.887 BPM  Pearson(HR) 0.9900  sig_Pearson 0.3464  MAPE 2.00%  (n_subjects=12)
+
+[*] Epoch 5/10  alpha=1.0, beta=1.0
+
+Epoch 5/10: Train loss 9.0288
+  TEST  HR MAE 1.648 BPM  RMSE 2.873 BPM  Pearson(HR) 0.9917  sig_Pearson 0.3471  MAPE 2.06%  (n_subjects=12)
+
+[*] Epoch 6/10  alpha=1.0, beta=1.0
+
+Epoch 6/10: Train loss 8.9211
+  TEST  HR MAE 2.600 BPM  RMSE 4.491 BPM  Pearson(HR) 0.9701  sig_Pearson 0.3365  MAPE 4.11%  (n_subjects=12)
+
+[*] Epoch 7/10  alpha=1.0, beta=1.0
+
+Epoch 7/10: Train loss 8.7954
+  TEST  HR MAE 1.318 BPM  RMSE 2.505 BPM  Pearson(HR) 0.9924  sig_Pearson 0.3221  MAPE 1.63%  (n_subjects=12)
+
+[*] Epoch 8/10  alpha=1.0, beta=1.0
+
+Epoch 8/10: Train loss 8.7088
+  TEST  HR MAE 1.941 BPM  RMSE 3.131 BPM  Pearson(HR) 0.9896  sig_Pearson 0.3134  MAPE 2.60%  (n_subjects=12)
+
+[*] Epoch 9/10  alpha=1.0, beta=1.0
+
+Epoch 9/10: Train loss 8.6514
+  TEST  HR MAE 1.099 BPM  RMSE 1.838 BPM  Pearson(HR) 0.9949  sig_Pearson 0.2829  MAPE 1.39%  (n_subjects=12)
+
+[*] Epoch 10/10  alpha=1.0, beta=1.0
+
+Epoch 10/10: Train loss 8.5954
+  TEST  HR MAE 2.637 BPM  RMSE 4.994 BPM  Pearson(HR) 0.9589  sig_Pearson 0.2724  MAPE 4.38%  (n_subjects=12)
+
+-> Best for PURE -> PURE: epoch 9 (valid HR RMSE 1.838 BPM)
+   TEST HR  MAE 1.099  RMSE 1.838  Pearson(HR) 0.9949
