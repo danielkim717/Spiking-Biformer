@@ -38,6 +38,11 @@ results/per_clip_test_best.txt
 results/pure_oc20_analysis.txt
 results/valid_vs_test_oc20.txt
 results/plots/spiking_biformer/
+
+# Spiking-related (out of scope, only BiPulseFormer kept)
+src/models/spiking_physformer.py
+scripts/*spiking*.py
+scripts/pretrain_physformer_pe.py
 results/plots/bipulseformer/per_subject_intra_PURE_session_split_epoch7.csv
 
 # Big files
