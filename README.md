@@ -131,26 +131,8 @@ out = softmax(scores) @ v_top
 | HR estimation | DiffNormalized → cumsum + detrend(λ=100) + Butterworth(0.75-2.5Hz) + periodogram |
 
 ## 📂 코드 구조
+<img width="645" height="273" alt="image" src="https://github.com/user-attachments/assets/02a09530-d4c2-4b0d-836c-1216f9390972" />
 
-```
-src/
-  models/
-    physformer_baseline.py      # PhysFormer (CVPR 2022) 공식 코드 포팅
-    bipulseformer.py            # PhysFormer + BiLevel Routing Attention (ANN)
-  data/
-    rppg_dataset.py             # PURE/UBFC-rPPG dataset
-                                #   PURE split modes: subject_exclusive (default),
-                                #     subject_exclusive_random (seed=42),
-                                #     session_per_subject
-  evaluation.py                 # rPPG-Toolbox per-subject 평가 (paper-comparable)
-  evaluation_per_clip.py        # per-clip 보조 평가 (5.3s clip)
-  train.py                      # NegPearsonLoss + FrequencyLoss (DLDL_softmax2)
-scripts/
-  run_intra_ubfc_bipulseformer.py        # UBFC 6:4 (RhythmFormer protocol) 학습
-  run_intra_712_onecycle.py              # 7:1:2 OneCycleLR 20ep (PURE+UBFC 통합)
-  eval_mape_paper.py                      # per-subject MAPE 계산
-  eval_valid_vs_test_best_oc20.py        # valid-best vs test-best epoch 비교
-```
 
 ## 🚀 실행 방법
 
